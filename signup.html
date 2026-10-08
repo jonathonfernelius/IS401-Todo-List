@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+<title>Create account — Tidy</title>
+<meta name="description" content="Set up a Tidy account and optionally connect Canvas to import assignments.">
+</head>
+<body data-page="signup">
+<div class="auth"><aside class="auth-aside"><a class="brand" href="index.html"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>Tidy</a>
+<div><h1>Classes and life, on one short list.</h1><p>Canvas assignments and personal to-dos, together in one calm place.</p></div><span>Made for students.</span></aside>
+<main class="auth-main"><form class="auth-form" id="auth-form">
+<h2>Create account</h2>
+<div class="grid-2"><div class="field"><label for="fn">First name</label><input id="fn" required></div><div class="field"><label for="ln">Last name</label><input id="ln" required></div></div>
+<div class="field"><label for="em">Email</label><input id="em" type="email" required></div>
+<div class="field"><label for="u">Username</label><input id="u" name="username" required></div>
+<div class="grid-2"><div class="field"><label for="p1">Password</label><input id="p1" type="password" minlength="8" autocomplete="new-password" required></div><div class="field"><label for="p2">Repeat password</label><input id="p2" type="password" minlength="8" autocomplete="new-password" required></div></div>
+<p class="muted">Canvas import is coming later. You can add tasks yourself after signing up.</p>
+<button class="btn btn-primary btn-block">Create account</button>
+<div class="auth-links"><a class="link" href="index.html">Back to log in</a></div>
+</form></main></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script><script src="js/supabase.js"></script><script src="js/store.js"></script><script src="js/auth.js"></script>
+</body></html>
