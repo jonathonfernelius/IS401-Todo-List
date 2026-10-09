@@ -16,9 +16,9 @@ Justin writes here
 
 ## Verifying the Vertical Slice
 To verify that Tidy's vertical slice is working:
- - Open the Tidy website and log in to your account.
- - Navigate to the To-do page and click the Add Task button.
- - Enter the task details and save the task.
- - Confirm that the new task appears in your task list.
- - Refresh the page and verify that the task is still there.
+ 1. Open the Tidy website and log in to your account.
+ 2. Navigate to the To-do page and click the Add Task button.
+ 3. Enter the task details and save the task.
+ 4. Confirm that the new task appears in your task list.
+ 5. Refresh the page and verify that the task is still there.
 If the task remains after refreshing, this confirms that the task was successfully saved to Supabase and retrieved from the database rather than being stored only temporarily in the browser.
