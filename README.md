@@ -1,6 +1,6 @@
 # IS401-Todo-List
 ## App Summary
-Anna writes here
+Students often struggle to manage assignments and deadlines across multiple courses and platforms. Tidy is a student focused task management app designed to organize coursework, manage tasks, and keep track of changing deadlines. The application combines a daily task overview, interactive to-do lists, and a calendar view into one platform. The main goal of Tidy is to simplify assignment tracking through planned Canvas integration, allowing students to manage and update their academic responsibilities more efficiently. By emphasizing simplicity and user experience, Tidy helps students stay organized without adding unnecessary complexity to their schedules. 
 
 ## Entity-Relationship Diagram
 ![Project ERD](images/IS401ERD.png "ERD")
