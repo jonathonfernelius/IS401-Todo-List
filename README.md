@@ -15,10 +15,12 @@ Students often struggle to manage assignments and deadlines across multiple cour
 Justin writes here
 
 ## Verifying the Vertical Slice
-To verify that Tidy's vertical slice is working:
- 1. Open the Tidy website and log in to your account.
- 2. Navigate to the To-do page and click the Add Task button.
- 3. Enter the task details and save the task.
- 4. Confirm that the new task appears in your task list.
- 5. Refresh the page and verify that the task is still there.
-If the task remains after refreshing, this confirms that the task was successfully saved to Supabase and retrieved from the database rather than being stored only temporarily in the browser.
+To verify that the account creation vertical slice is working:
+1. Open the website.
+2. Click the Sign Up button to create a new account.
+3. Enter the required account information and submit the form.
+4. Confirm that the account was successfully created.
+5. Refresh the page and verify that the user remains logged in.
+6. Check Supabase to confirm that the new account information was saved to the database.
+
+If the account remains accessible after refreshing, this demonstrates that the frontend successfully communicates with Supabase and that user account information persists.
