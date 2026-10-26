@@ -66,7 +66,7 @@
               <button class="btn btn-secondary">Update password</button></form></section>
 
           <section class="card delete-account-card"><div class="section-head"><h2>Delete account</h2></div>
-            <p class="muted">Permanently remove your account and all your Tidy data.</p>
+            <p class="muted">Permanently remove your account and all your Coursewise data.</p>
             <button type="button" class="btn btn-danger" id="delete-account">Delete account</button></section>
         </div></div></div>`;
 

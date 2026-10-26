@@ -100,7 +100,8 @@
       prefs: { theme: THEMES.some(t => t[0]===settings.ColorTheme) ? settings.ColorTheme : 'green', weekStart: settings.WeekStart, showDone: settings.ShowDone },
       categories: categories.map(c => ({id:id(c.CategoryID),name:c.DisplayName,tone:tones.includes(c.DisplayColor)?c.DisplayColor:'slate'})),
       lists: lists.map(l => ({id:l.ListID,title:l.Title})), tasks: tasks.map(taskFromRow), canvasConnected: false };
-    document.documentElement.dataset.theme = state.prefs.theme;
+    if (window.CoursewiseTheme) window.CoursewiseTheme.apply(state.prefs.theme);
+    else document.documentElement.dataset.theme = state.prefs.theme;
   }
   async function init() {
     requireDb();

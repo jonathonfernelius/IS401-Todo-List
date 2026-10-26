@@ -1,4 +1,4 @@
-/* Tidy — shared styles */
+/* Coursewise — shared styles */
 :root{
   --hue:160;--pc:.1;
   --radius:1rem;
@@ -292,3 +292,67 @@ button:disabled { opacity: .6; cursor: wait; }
 .auth-status { margin-top: 1rem; line-height: 1.5; }
 .auth-status.error { color: #a52b2b; }
 input[readonly] { opacity: .75; }
+
+/* Coursewise wordmark */
+.brand-logo{display:block;width:clamp(124px,14vw,152px);height:auto;object-fit:contain;transition:transform .25s cubic-bezier(.3,1.4,.5,1),opacity .2s}
+.site-header .brand{padding:.35rem 0}
+.site-header .brand:hover .brand-logo{transform:translateY(-1px) rotate(-1.5deg)}
+.auth-aside .brand-logo{width:clamp(170px,18vw,220px);filter:drop-shadow(0 6px 18px rgb(0 0 0/.12))}
+.auth-aside{position:relative;overflow:hidden}
+.auth-aside::before{content:"";position:absolute;width:26rem;height:26rem;right:-9rem;bottom:-9rem;border-radius:50%;background:radial-gradient(circle,rgb(255 255 255/.14),transparent 70%);pointer-events:none}
+.auth-aside>*{position:relative}
+@media(max-width:600px){.brand-logo{width:120px}}
+
+/* Embedded artwork keeps the themed logo visible without an external CSS mask. */
+.site-header .brand-logo-themed{
+  color:var(--primary-dark);
+  flex-shrink:0;
+}
+
+/* Theme-aware startup screen: visible while authentication and data load. */
+.workspace-loading{
+  position:relative;isolation:isolate;overflow:hidden;display:grid;place-items:center;
+  min-height:100vh;min-height:100svh;padding:3rem 1.5rem;background:var(--bg);color:var(--primary-dark);
+}
+.workspace-loading::before,.workspace-loading::after{
+  content:"";position:absolute;z-index:-1;pointer-events:none;width:min(75vw,60rem);height:min(55vw,38rem);
+  background:radial-gradient(ellipse,color-mix(in oklch,var(--primary) 15%,transparent),transparent 70%);
+  border-radius:48% 52% 65% 35%;
+}
+.workspace-loading::before{top:-20%;left:-25%;transform:rotate(-20deg)}
+.workspace-loading::after{bottom:-22%;right:-22%;transform:rotate(-25deg)}
+.loading-content{width:100%;max-width:38rem;text-align:center}
+.loading-logo{display:block;width:clamp(210px,42vw,390px);height:auto;margin:0 auto 2.5rem;color:var(--primary-dark)}
+.loading-checklist{
+  width:128px;margin:0 auto 1.75rem;padding:20px;border:1px solid color-mix(in oklch,var(--primary) 10%,var(--card));
+  border-radius:20px;background:color-mix(in oklch,var(--card) 80%,var(--accent));
+  box-shadow:0 8px 35px color-mix(in oklch,var(--primary) 12%,transparent);display:grid;gap:10px;
+}
+.loading-row{display:flex;align-items:center;gap:10px}
+.loading-row i{display:block;flex:none;width:23px;height:23px;border:2px solid color-mix(in oklch,var(--primary) 25%,var(--card));border-radius:50%}
+.loading-row .loading-check{background:var(--primary-dark);border-color:var(--primary-dark);color:var(--primary-fg)}
+.loading-check svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.loading-row b{height:6px;width:100%;border-radius:5px;background:color-mix(in oklch,var(--primary) 20%,var(--card))}
+.loading-row:first-child b{background:var(--primary-dark)}
+.loading-row:nth-child(2) b{width:70%}
+.loading-content h1{font-size:clamp(1.65rem,4vw,2.5rem);line-height:1.2;margin-bottom:.85rem}
+.loading-content p{font-size:clamp(.85rem,2vw,1rem);line-height:1.7;color:var(--muted-fg);text-wrap:balance}
+.loading-track{width:clamp(180px,40vw,250px);height:7px;overflow:hidden;border-radius:20px;background:var(--accent);margin:1.75rem auto 0}
+.loading-track span{display:block;width:42%;height:100%;border-radius:inherit;background:var(--primary-dark);animation:coursewise-loading 1.8s ease-in-out infinite alternate}
+@keyframes coursewise-loading{from{transform:translateX(-70%)}to{transform:translateX(210%)}}
+@media(prefers-reduced-motion:reduce){.loading-track span{animation:none;transform:translateX(70%)}}
+@media(max-height:520px){.workspace-loading{padding:1.5rem}.loading-logo{margin-bottom:1rem;width:210px}.loading-checklist{margin-bottom:1rem;padding:12px;width:105px;gap:6px}.loading-track{margin-top:1rem}}
+
+/* Quick navigation stays quiet; the full loader appears only after one second. */
+html[data-workspace-loading] #main{padding:0}
+html[data-workspace-loading="pending"] .workspace-loading{visibility:hidden;opacity:0;pointer-events:none}
+html[data-workspace-loading="slow"] .workspace-loading{visibility:visible;opacity:1;animation:coursewise-page-in .18s ease-out both}
+.page-enter{animation:coursewise-page-in .16s ease-out both}
+@keyframes coursewise-page-in{from{opacity:0}to{opacity:1}}
+/* Native same-origin page transitions where supported; normal navigation elsewhere. */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.16s}
+@media(prefers-reduced-motion:reduce){
+  .page-enter,html[data-workspace-loading="slow"] .workspace-loading{animation:none}
+  ::view-transition-old(root),::view-transition-new(root){animation:none}
+}
