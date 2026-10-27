@@ -540,6 +540,18 @@
             !/^\d+$/.test(String(item.categoryId))
         ).length;
 
+        console.log(
+            "Invalid list values:",
+            [...new Set(
+                items
+                .filter(item =>
+                    item.listId != null &&
+                    !/^\d+$/.test(String(item.listId))
+                )
+                .map(item => String(item.listId))
+            )]
+        );
+
         console.table({
             total: items.length,
             duplicateUIDs: duplicateCount,
