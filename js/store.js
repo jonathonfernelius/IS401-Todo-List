@@ -99,7 +99,11 @@
     state = { signedIn: true, user: { first: profile.FirstName, last: profile.LastName, username: profile.Username, email: authUser.email || '' },
       prefs: { theme: THEMES.some(t => t[0]===settings.ColorTheme) ? settings.ColorTheme : 'green', weekStart: settings.WeekStart, showDone: settings.ShowDone },
       categories: categories.map(c => ({id:id(c.CategoryID),name:c.DisplayName,tone:tones.includes(c.DisplayColor)?c.DisplayColor:'slate'})),
-      lists: lists.map(l => ({id:l.ListID,title:l.Title})), tasks: tasks.map(taskFromRow), canvasConnected: false };
+      lists: lists.map(l => ({id:l.ListID,title:l.Title})),
+      tasks: tasks
+        .filter(task => !task.CanvasExcluded)
+        .map(taskFromRow),
+      canvasConnected: false };
     if (window.CoursewiseTheme) window.CoursewiseTheme.apply(state.prefs.theme);
     else document.documentElement.dataset.theme = state.prefs.theme;
   }

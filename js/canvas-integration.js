@@ -1,20 +1,23 @@
 
 /*
-  Coursewise Canvas Integration
-  Connect, disconnect, and preview BYU Canvas events.
-  Preview does NOT create tasks.
-*/
+ * Coursewise Canvas Integration
+ * Connection, preview, importing, and saved selections.
+ */
 
 (() => {
   "use strict";
 
   const client = window.tidyClient;
+  let connected = false;
+  let currentSection = null;
+  let previewData = null;
 
+  // Choices remain available while this page is open.
+  const choices = new Map();
+  const coursePreferences = new Map();
 
-  // Coursewise-style Canvas checkboxes
-  const canvasStyles = document.createElement("style");
-
-  canvasStyles.textContent = `
+  const style = document.createElement("style");
+  style.textContent = `
     #cw-canvas-preview input[type="checkbox"] {
       appearance: none;
       -webkit-appearance: none;
@@ -27,58 +30,92 @@
       cursor: pointer;
       display: grid;
       place-items: center;
-      transition: all 0.15s ease;
+      flex-shrink: 0;
     }
-
     #cw-canvas-preview input[type="checkbox"]:checked {
       background: var(--primary, #a35b79);
       border-color: var(--primary, #a35b79);
     }
-
     #cw-canvas-preview input[type="checkbox"]:checked::after {
       content: "✓";
       color: white;
       font-size: 14px;
       font-weight: bold;
     }
-
     #cw-canvas-preview input[type="checkbox"]:focus-visible {
       outline: 3px solid #eec3d6;
       outline-offset: 3px;
     }
-
-    #cw-canvas-preview label:hover {
-      background: rgba(163, 91, 121, 0.04);
+    .cw-event-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 6px;
+      cursor: pointer;
+    }
+    .cw-event-row:hover {
+      background: rgba(163, 91, 121, 0.05);
       border-radius: 8px;
     }
+    .cw-course {
+      padding: 12px;
+      border: 1px solid var(--border, #e5e5e5);
+      border-radius: 12px;
+      margin-top: 12px;
+    }
+    .cw-course summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .cw-course-settings {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+    .cw-course-settings label {
+      flex: 1;
+      min-width: 145px;
+      font-size: 13px;
+    }
+    .cw-course-settings select {
+      display: block;
+      width: 100%;
+      margin-top: 5px;
+      padding: 9px;
+      border: 1px solid var(--border, #ddd);
+      border-radius: 8px;
+      background: var(--surface, white);
+      color: inherit;
+    }
+    .cw-status {
+      font-size: 12px;
+      opacity: .7;
+      margin-top: 3px;
+    }
+    .cw-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
   `;
-
-  document.head.appendChild(canvasStyles);
-
-
-  let connected = false;
-
-
-  // Remember Canvas preview choices while this page is open.
-  const assignmentChoices = new Map();
-  const coursePreferences = new Map();
-
+  document.head.appendChild(style);
 
   async function callFunction(name, body) {
     if (!client) {
       throw new Error("Supabase is not available.");
     }
 
-    const { data: sessionData } = await client.auth.getSession();
+    const { data: sessionData } =
+      await client.auth.getSession();
 
     if (!sessionData?.session) {
       throw new Error("Please sign in again.");
     }
 
-    const { data, error } = await client.functions.invoke(
-      name,
-      { body }
-    );
+    const { data, error } =
+      await client.functions.invoke(name, { body });
 
     if (error) {
       let explanation = error.message;
@@ -87,10 +124,10 @@
         const response = await error.context?.json();
         explanation = response?.error || explanation;
       } catch {
-        // Keep original error.
+        // Keep the original error message.
       }
 
-      throw new Error(explanation);
+      throw new Error(explanation || "Request failed.");
     }
 
     if (data?.error) {
@@ -100,7 +137,7 @@
     return data || {};
   }
 
-  async function callCanvas(action, feedUrl) {
+  function callCanvas(action, feedUrl) {
     const body = { action };
 
     if (action === "connect") {
@@ -110,272 +147,303 @@
     return callFunction("canvas-connect", body);
   }
 
-  function showMessage(section, text, isError = false) {
-    const message = section.querySelector("#cw-canvas-message");
+  function message(section, text, isError = false) {
+    const target =
+      section.querySelector("#cw-canvas-message");
 
-    if (message) {
-      message.textContent = text;
-      message.style.color = isError ? "#b42318" : "";
+    if (target) {
+      target.textContent = text;
+      target.style.color =
+        isError ? "#b42318" : "";
     }
   }
 
-  function makeElement(tag, text, className = "") {
-    const element = document.createElement(tag);
-    element.textContent = text;
-
-    if (className) {
-      element.className = className;
-    }
-
-    return element;
+  function element(tag, text, className = "") {
+    const result = document.createElement(tag);
+    result.textContent = text;
+    result.className = className;
+    return result;
   }
 
-  // Displays the assignments and groups from Canvas.
-  function displayPreview(section, events) {
-    const container = section.querySelector("#cw-canvas-preview");
-    if (!container) return;
+  // Creates a dropdown using Coursewise's real data.
+  function dropdown(title, options, value, onChange) {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = title;
+
+    const select = document.createElement("select");
+
+    for (const option of options) {
+      const node = document.createElement("option");
+      node.value = String(option.value);
+      node.textContent = option.label;
+      select.appendChild(node);
+    }
+
+    select.value = value || "";
+    select.addEventListener("change", () => {
+      onChange(select.value);
+    });
+
+    wrapper.appendChild(select);
+    return wrapper;
+  }
+
+  // Keep selection and organization choices together.
+  function getChoice(event) {
+    if (!choices.has(event.uid)) {
+      choices.set(event.uid, {
+        selected: true,
+        listId: null,
+        categoryId: null
+      });
+    }
+
+    return choices.get(event.uid);
+  }
+
+  // Read stored choices and imported task IDs.
+  async function loadSelections(events) {
+    const result = await callFunction(
+      "canvas-selections",
+      { action: "load" }
+    );
+
+    const saved = new Map(
+      (result.choices || []).map(item => [
+        item.CanvasUID,
+        item
+      ])
+    );
+
+    const imported = new Map(
+      (result.imported || []).map(item => [
+        item.CanvasUID,
+        String(item.TaskID)
+      ])
+    );
+
+    const tasks = window.Tidy?.state?.tasks || [];
+
+    for (const event of events) {
+      const stored = saved.get(event.uid);
+      const existingTaskId = imported.get(event.uid);
+      const existingTask = tasks.find(
+        task => String(task.id) === existingTaskId
+      );
+
+      // A local unsaved change takes precedence.
+      if (!choices.has(event.uid)) {
+        choices.set(event.uid, {
+          selected: stored
+            ? stored.Selected
+            : existingTask
+              ? true
+              : true,
+          listId: stored
+            ? stored.ListID == null
+              ? null : String(stored.ListID)
+            : existingTask?.listId || null,
+          categoryId: stored
+            ? stored.CategoryID == null
+              ? null : String(stored.CategoryID)
+            : existingTask?.categoryId || null
+        });
+      }
+    }
+
+    return imported;
+  }
+
+  // Uses course preferences for new assignments.
+  function applyCoursePreference(course, field, value, events) {
+    for (const event of events) {
+      const eventCourse = event.course || "Unsorted";
+      if (eventCourse !== course) continue;
+
+      getChoice(event)[field] = value || null;
+    }
+
+    const preference = coursePreferences.get(course) || {};
+    preference[field] = value || null;
+    coursePreferences.set(course, preference);
+  }
+
+  function renderPreview(section, events, imported) {
+    const container =
+      section.querySelector("#cw-canvas-preview");
 
     container.replaceChildren();
 
-    const heading = makeElement(
+    container.appendChild(element(
       "h3",
       `Canvas Calendar Preview (${events.length} items)`
-    );
-    container.appendChild(heading);
+    ));
 
-    container.appendChild(makeElement(
+    container.appendChild(element(
       "p",
-      "Review your Canvas events. Nothing will be imported yet.",
+      "Select assignments and organize them by course.",
       "muted"
     ));
 
-    if (events.length === 0) {
-      container.appendChild(makeElement(
+    if (!events.length) {
+      container.appendChild(element(
         "p",
         "No calendar events were found."
       ));
       return;
     }
 
-    // Group events by their detected course.
-    const groups = {};
+    const groups = new Map();
 
     for (const event of events) {
       const course = event.course || "Unsorted";
 
-      if (!groups[course]) {
-        groups[course] = [];
+      if (!groups.has(course)) {
+        groups.set(course, []);
       }
 
-      groups[course].push(event);
+      groups.get(course).push(event);
     }
 
-    
-    const selected = new Set();
-
-    events.forEach((event, index) => {
-      if (!assignmentChoices.has(event.uid)) {
-        assignmentChoices.set(event.uid, true);
-      }
-
-      if (assignmentChoices.get(event.uid)) {
-        selected.add(index);
-      }
-    });
-
-
-
-    const courseChoices = new Map();
-
-    function makeDropdown(label, options) {
-      const wrapper = document.createElement("div");
-      wrapper.style.flex = "1";
-
-      const caption = makeElement("label", label);
-      caption.style.display = "block";
-      caption.style.marginBottom = "5px";
-
-      const select = document.createElement("select");
-      select.style.width = "100%";
-
-      for (const option of options) {
-        const element = document.createElement("option");
-        element.value = option.value;
-        element.textContent = option.label;
-        select.appendChild(element);
-      }
-
-      wrapper.append(caption, select);
-      return { wrapper, select };
-    }
-
-
-    const counter = makeElement("p", "");
+    const rows = new Map();
+    const counter = element("p", "");
     container.appendChild(counter);
 
-    function updateCounter() {
+    function refreshCheckboxes() {
+      let selected = 0;
+
+      for (const event of events) {
+        const checked = getChoice(event).selected;
+
+        if (checked) selected++;
+
+        const checkbox = rows.get(event.uid);
+        if (checkbox) checkbox.checked = checked;
+      }
+
       counter.textContent =
-        `${selected.size} of ${events.length} items selected`;
+        `${selected} of ${events.length} selected`;
     }
 
-    updateCounter();
-
-    const allButton = makeElement(
+    const allButton = element(
       "button",
-      "Deselect All",
+      "Select / Deselect All",
       "btn btn-outline"
     );
     allButton.type = "button";
 
-    container.appendChild(allButton);
-
-    // Keep references to every item checkbox.
-    const checkboxes = [];
-
     allButton.addEventListener("click", () => {
-      const selectAll = selected.size !== events.length;
+      const allSelected = events.every(
+        event => getChoice(event).selected
+      );
 
-      if (selectAll) {
-        events.forEach((event, index) => selected.add(index));
-      } else {
-        selected.clear();
+      for (const event of events) {
+        getChoice(event).selected = !allSelected;
       }
 
-      
-      for (const checkbox of checkboxes) {
-        checkbox.checked = selectAll;
-      }
-
-      events.forEach(event => {
-        assignmentChoices.set(event.uid, selectAll);
-      });
-
-
-      allButton.textContent = selectAll
-        ? "Deselect All"
-        : "Select All";
-
-      updateCounter();
+      refreshCheckboxes();
     });
 
-    for (const [course, courseEvents] of Object.entries(groups)) {
-      const group = document.createElement("details");
-      group.style.marginTop = "18px";
+    container.appendChild(allButton);
 
-      const summary = makeElement(
+    const state = window.Tidy?.state;
+
+    const listOptions = [
+      { value: "", label: "No list" },
+      ...(state?.lists || []).map(item => ({
+        value: String(item.id),
+        label: item.title
+      }))
+    ];
+
+    const categoryOptions = [
+      { value: "", label: "No category" },
+      ...(state?.categories || []).map(item => ({
+        value: String(item.id),
+        label: item.name
+      }))
+    ];
+
+    for (const [course, courseEvents] of groups) {
+      const details = document.createElement("details");
+      details.className = "cw-course";
+
+      const summary = element(
         "summary",
         `${course} (${courseEvents.length} items)`
       );
-      summary.style.cursor = "pointer";
-      summary.style.fontWeight = "600";
-
-      group.appendChild(summary);
-
-
-      const state = window.Tidy.state;
-
-      const listDropdown = makeDropdown(
-        "List for this course",
-        [
-          { value: "", label: "No list" },
-          ...state.lists.map(l => ({
-            value: String(l.id),
-            label: l.title
-          }))
-        ]
-      );
-
-      const categoryDropdown = makeDropdown(
-        "Category for this course",
-        [
-          { value: "", label: "No category" },
-          ...state.categories.map(c => ({
-            value: String(c.id),
-            label: c.name
-          }))
-        ]
-      );
+      details.appendChild(summary);
 
       const settings = document.createElement("div");
-      settings.style.display = "flex";
-      settings.style.flexWrap = "wrap";
-      settings.style.gap = "12px";
-      settings.style.marginTop = "12px";
+      settings.className = "cw-course-settings";
 
-      settings.append(
-        listDropdown.wrapper,
-        categoryDropdown.wrapper
-      );
+      // Use saved defaults, or infer from the first item.
+      const pref = coursePreferences.get(course) || {};
+      const first = getChoice(courseEvents[0]);
 
-      group.appendChild(settings);
+      settings.appendChild(dropdown(
+        "List for this course",
+        listOptions,
+        pref.listId ?? first.listId,
+        value => applyCoursePreference(
+          course, "listId", value, events
+        )
+      ));
 
-      
-      const saved = coursePreferences.get(course);
+      settings.appendChild(dropdown(
+        "Category for this course",
+        categoryOptions,
+        pref.categoryId ?? first.categoryId,
+        value => applyCoursePreference(
+          course, "categoryId", value, events
+        )
+      ));
 
-      if (saved) {
-        listDropdown.select.value = saved.list;
-        categoryDropdown.select.value = saved.category;
-      }
+      details.appendChild(settings);
 
-      function saveCoursePreferences() {
-        coursePreferences.set(course, {
-          list: listDropdown.select.value,
-          category: categoryDropdown.select.value
-        });
-      }
-
-      listDropdown.select.addEventListener(
-        "change",
-        saveCoursePreferences
-      );
-
-      categoryDropdown.select.addEventListener(
-        "change",
-        saveCoursePreferences
-      );
-
-      courseChoices.set(course, {
-        list: listDropdown.select,
-        category: categoryDropdown.select
-      });
-
-
-
-      // Select or deselect an entire course.
-      const groupButton = makeElement(
+      const groupButton = element(
         "button",
         "Select / Deselect Course",
         "btn btn-outline"
       );
       groupButton.type = "button";
-      groupButton.style.marginTop = "10px";
-      groupButton.style.marginBottom = "10px";
 
-      group.appendChild(groupButton);
+      groupButton.addEventListener("click", () => {
+        const allSelected = courseEvents.every(
+          event => getChoice(event).selected
+        );
 
-      const courseCheckboxes = [];
+        for (const event of courseEvents) {
+          getChoice(event).selected = !allSelected;
+        }
+
+        refreshCheckboxes();
+      });
+
+      details.appendChild(groupButton);
 
       for (const event of courseEvents) {
-        const index = events.indexOf(event);
-
         const row = document.createElement("label");
-        row.style.display = "flex";
-        row.style.alignItems = "flex-start";
-        row.style.gap = "10px";
-        row.style.padding = "10px 0";
-        row.style.cursor = "pointer";
+        row.className = "cw-event-row";
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.checked = true;
+        checkbox.checked = getChoice(event).selected;
 
-        const information = document.createElement("div");
+        checkbox.addEventListener("change", () => {
+          getChoice(event).selected = checkbox.checked;
+          refreshCheckboxes();
+        });
 
-        information.appendChild(
-          makeElement("strong", event.title || "Untitled")
-        );
+        rows.set(event.uid, checkbox);
 
-        information.appendChild(makeElement(
+        const info = document.createElement("div");
+        info.appendChild(element(
+          "strong",
+          event.title || "Untitled"
+        ));
+
+        info.appendChild(element(
           "div",
           event.due
             ? `Date: ${event.due}`
@@ -383,169 +451,205 @@
           "muted"
         ));
 
-        if (event.kind === "calendar_event") {
-          information.appendChild(makeElement(
-            "small",
-            "Calendar event (assignment status unconfirmed)",
-            "muted"
-          ));
+        let label = imported.has(event.uid)
+          ? "Already imported"
+          : "New";
+
+        if (!getChoice(event).selected) {
+          label += " · Unselected";
         }
 
-        checkbox.addEventListener("change", () => {
-          
-          assignmentChoices.set(event.uid, checkbox.checked);
+        info.appendChild(element(
+          "div",
+          label,
+          "cw-status"
+        ));
 
-          if (checkbox.checked) {
-            selected.add(index);
-          } else {
-            selected.delete(index);
-          }
-
-
-          updateCounter();
-          allButton.textContent =
-            selected.size === events.length
-              ? "Deselect All"
-              : "Select All";
-        });
-
-        checkboxes.push(checkbox);
-        courseCheckboxes.push({ checkbox, index });
-
-        row.appendChild(checkbox);
-        row.appendChild(information);
-        group.appendChild(row);
+        row.append(checkbox, info);
+        details.appendChild(row);
       }
 
-      groupButton.addEventListener("click", () => {
-        const allChecked = courseCheckboxes.every(
-          item => item.checkbox.checked
-        );
-
-        for (const item of courseCheckboxes) {
-          item.checkbox.checked = !allChecked;
-
-          assignmentChoices.set(
-            events[item.index].uid,
-            !allChecked
-          );
-
-
-          if (allChecked) {
-            selected.delete(item.index);
-          } else {
-            selected.add(item.index);
-          }
-        }
-
-        updateCounter();
-        allButton.textContent =
-          selected.size === events.length
-            ? "Deselect All"
-            : "Select All";
-      });
-
-      container.appendChild(group);
+      container.appendChild(details);
     }
 
-    
-    const importButton = makeElement(
+    refreshCheckboxes();
+
+    const buttons = document.createElement("div");
+    buttons.className = "cw-actions";
+
+    const importButton = element(
       "button",
-      "Import Selected Assignments",
+      "Import New Assignments",
       "btn btn-primary"
     );
-
     importButton.type = "button";
-    importButton.style.marginTop = "20px";
 
-    const resultMessage = makeElement("p", "");
-    resultMessage.setAttribute("role", "status");
+    const updateButton = element(
+      "button",
+      "Update Selections",
+      "btn btn-outline"
+    );
+    updateButton.type = "button";
 
-    container.append(importButton, resultMessage);
+    buttons.append(importButton, updateButton);
+    container.appendChild(buttons);
 
+    const feedback = element("p", "");
+    feedback.setAttribute("role", "status");
+    container.appendChild(feedback);
+
+    function selectedItems() {
+      return events.map(event => {
+        const choice = getChoice(event);
+
+        return {
+          uid: event.uid,
+          selected: choice.selected,
+          listId: choice.listId,
+          categoryId: choice.categoryId
+        };
+      });
+    }
+
+    function busy(value) {
+      importButton.disabled = value;
+      updateButton.disabled = value;
+    }
+
+    // Save checked/unchecked status, lists, and categories.
+    async function saveSelections() {
+      return callFunction("canvas-selections", {
+        action: "save",
+        items: selectedItems()
+      });
+    }
+
+    // Updates existing tasks and remembers new-item choices.
+    updateButton.addEventListener("click", async () => {
+      busy(true);
+      feedback.textContent = "Saving selections...";
+
+      try {
+        const result = await saveSelections();
+
+        await window.Tidy.reload();
+
+        feedback.textContent =
+          `Saved! ${result.updated} imported tasks updated.`;
+
+        message(
+          section,
+          "Selections saved. Hidden assignments will not " +
+          "appear on Home, To-do, or Calendar after reload."
+        );
+
+      } catch (error) {
+        feedback.textContent = error.message;
+        message(section, error.message, true);
+      } finally {
+        busy(false);
+      }
+    });
+
+    // Only imports checked items not already imported.
     importButton.addEventListener("click", async () => {
-      const items = events
-        .filter((event, index) => selected.has(index))
-        .map(event => {
-          const choices = courseChoices.get(
-            event.course || "Unsorted"
-          );
+      const newItems = selectedItems().filter(
+        item => item.selected && !imported.has(item.uid)
+      );
 
-          return {
-            uid: event.uid,
-            listId: choices?.list.value || null,
-            categoryId: choices?.category.value || null
-          };
-        });
-
-      if (items.length === 0) {
-        resultMessage.textContent =
-          "Select at least one assignment.";
+      if (!newItems.length) {
+        feedback.textContent =
+          "No new selected assignments to import. " +
+          "Use Update Selections for existing tasks.";
         return;
       }
 
       if (!confirm(
-        `Import ${items.length} selected items into Coursewise?`
+        `Import ${newItems.length} new Canvas items?`
       )) return;
 
-      importButton.disabled = true;
-      resultMessage.textContent = "Importing assignments...";
+      busy(true);
+      feedback.textContent = "Importing...";
 
       try {
         const result = await callFunction(
           "canvas-import",
-          { items }
+          {
+            items: newItems.map(item => ({
+              uid: item.uid,
+              listId: item.listId,
+              categoryId: item.categoryId
+            }))
+          }
         );
 
+        // Fetch fresh mappings before saving choices.
+        const refreshed = await callFunction(
+          "canvas-selections",
+          { action: "load" }
+        );
+
+        imported.clear();
+        for (const row of refreshed.imported || []) {
+          imported.set(row.CanvasUID, String(row.TaskID));
+        }
+
+        await saveSelections();
         await window.Tidy.reload();
 
-        resultMessage.textContent =
-          `${result.added} assignments imported! ` +
-          `${result.skipped} already imported or unavailable.`;
+        feedback.textContent =
+          `${result.added} new assignments imported!`;
 
-        showMessage(
+        message(
           section,
-          "Import complete! Open To-do or Calendar to see your assignments."
+          "Import complete! Open To-do or Calendar " +
+          "to see your assignments."
         );
 
       } catch (error) {
-        resultMessage.textContent =
-          error.message + " Check your task list before retrying.";
+        feedback.textContent =
+          error.message +
+          " Refresh and check your task list before retrying.";
+        message(section, error.message, true);
       } finally {
-        importButton.disabled = false;
+        busy(false);
       }
     });
-
   }
 
-  // Requests the saved Canvas calendar from Supabase.
   async function previewCanvas(section) {
-    const button = section.querySelector("#cw-preview-button");
+    const button =
+      section.querySelector("#cw-preview-button");
 
     button.disabled = true;
     button.textContent = "Loading Canvas calendar...";
-    showMessage(section, "Reading Canvas calendar...");
+    message(section, "Reading Canvas calendar...");
 
     try {
-      const result = await callFunction("canvas-preview", {});
+      const result = await callFunction(
+        "canvas-preview", {}
+      );
 
       if (!section.isConnected) return;
 
       const events = result.events || [];
 
       if (!Array.isArray(events)) {
-        throw new Error("Canvas returned an unexpected response.");
+        throw new Error("Unexpected Canvas response.");
       }
 
-      displayPreview(section, events);
+      const imported = await loadSelections(events);
 
-      showMessage(
+      previewData = { events, imported };
+      renderPreview(section, events, imported);
+
+      message(
         section,
         `Found ${events.length} calendar items.`
       );
 
     } catch (error) {
-      showMessage(section, error.message, true);
+      message(section, error.message, true);
     } finally {
       if (button.isConnected) {
         button.disabled = false;
@@ -554,21 +658,18 @@
     }
   }
 
-  // Connected / disconnected screen.
   function showInterface(section) {
-    if (!section.isConnected) return;
+    const content =
+      section.querySelector("#cw-canvas-content");
 
-    const content = section.querySelector("#cw-canvas-content");
     if (!content) return;
 
     if (connected) {
       content.innerHTML = `
         <p><strong>Canvas calendar connected!</strong></p>
-
         <p class="muted">
-          Your Canvas calendar is connected to Coursewise.
+          Manage assignments from your BYU Canvas calendar.
         </p>
-
         <button
           type="button"
           id="cw-preview-button"
@@ -576,42 +677,44 @@
         >
           Preview Canvas Assignments
         </button>
-
-        <div id="cw-canvas-preview" style="margin-top:20px"></div>
-
+        <div id="cw-canvas-preview"
+             style="margin-top:20px"></div>
         <div style="margin-top:20px">
-          <button
-            type="button"
-            id="cw-disconnect"
-            class="btn btn-outline"
-          >
+          <button type="button"
+                  id="cw-disconnect"
+                  class="btn btn-outline">
             Disconnect Canvas
           </button>
         </div>
       `;
 
       content.querySelector("#cw-preview-button")
-        .addEventListener("click", () => previewCanvas(section));
+        .addEventListener(
+          "click",
+          () => previewCanvas(section)
+        );
 
-      const disconnectButton =
+      const disconnect =
         content.querySelector("#cw-disconnect");
 
-      disconnectButton.addEventListener("click", async () => {
-        if (!confirm("Disconnect your Canvas calendar?")) return;
+      disconnect.addEventListener("click", async () => {
+        if (!confirm("Disconnect your Canvas calendar?")) {
+          return;
+        }
 
-        disconnectButton.disabled = true;
-        showMessage(section, "Disconnecting...");
+        disconnect.disabled = true;
 
         try {
           await callCanvas("disconnect");
-
           connected = false;
+          choices.clear();
+          coursePreferences.clear();
+          previewData = null;
           showInterface(section);
-          showMessage(section, "Canvas disconnected.");
-
+          message(section, "Canvas disconnected.");
         } catch (error) {
-          showMessage(section, error.message, true);
-          disconnectButton.disabled = false;
+          message(section, error.message, true);
+          disconnect.disabled = false;
         }
       });
 
@@ -622,7 +725,6 @@
             <label for="cw-canvas-url">
               Canvas Calendar Feed URL
             </label>
-
             <input
               type="url"
               id="cw-canvas-url"
@@ -631,73 +733,70 @@
               autocomplete="off"
               spellcheck="false"
             >
-
             <small>
-              In Canvas, open Calendar and select
-              Calendar Feed to copy your link.
-              Keep the URL private.
+              In Canvas, select Calendar → Calendar Feed.
+              Keep your URL private.
             </small>
           </div>
-
           <button type="submit" class="btn btn-primary">
             Connect Canvas
           </button>
         </form>
       `;
 
-      const form = content.querySelector("#cw-canvas-form");
+      const form =
+        content.querySelector("#cw-canvas-form");
 
-      form.addEventListener("submit", async (event) => {
+      form.addEventListener("submit", async event => {
         event.preventDefault();
 
         const button = form.querySelector("button");
         const input = form.querySelector("#cw-canvas-url");
 
         button.disabled = true;
-        showMessage(section, "Connecting to Canvas...");
+        message(section, "Connecting to Canvas...");
 
         try {
           await callCanvas("connect", input.value.trim());
-
           input.value = "";
           connected = true;
-
+          choices.clear();
+          coursePreferences.clear();
           showInterface(section);
-          showMessage(section, "Canvas connected successfully!");
-
+          message(
+            section,
+            "Canvas connected successfully!"
+          );
         } catch (error) {
-          showMessage(section, error.message, true);
+          message(section, error.message, true);
           button.disabled = false;
         }
       });
     }
   }
 
-  // Initializes Canvas when Profile renders.
   async function initializeCanvas(section) {
-    if (section.dataset.canvasInitialized === "true") return;
+    if (section.dataset.canvasInitialized === "true") {
+      return;
+    }
 
     section.dataset.canvasInitialized = "true";
+    currentSection = section;
 
     section.innerHTML = `
       <div class="section-head">
         <h2>Canvas Integration</h2>
       </div>
-
       <p class="muted">
         Connect your BYU Canvas calendar to Coursewise.
       </p>
-
       <div id="cw-canvas-content">
         <p class="muted">Checking Canvas connection...</p>
       </div>
-
-      <p
-        id="cw-canvas-message"
-        role="status"
-        aria-live="polite"
-        style="margin-top:12px"
-      ></p>
+      <p id="cw-canvas-message"
+         role="status"
+         aria-live="polite"
+         style="margin-top:12px"></p>
     `;
 
     try {
@@ -711,18 +810,16 @@
     } catch (error) {
       if (!section.isConnected) return;
 
-      const content = section.querySelector("#cw-canvas-content");
+      const content =
+        section.querySelector("#cw-canvas-content");
 
       content.innerHTML = `
         <p class="muted">
           Could not load Canvas connection status.
         </p>
-
-        <button
-          type="button"
-          id="cw-retry"
-          class="btn btn-outline"
-        >
+        <button type="button"
+                id="cw-retry"
+                class="btn btn-outline">
           Try Again
         </button>
       `;
@@ -733,13 +830,13 @@
           initializeCanvas(section);
         });
 
-      showMessage(section, error.message, true);
+      message(section, error.message, true);
     }
   }
 
-  // Profile can dynamically recreate its Canvas section.
   function checkForCanvas() {
-    const section = document.getElementById("canvas");
+    const section =
+      document.getElementById("canvas");
 
     if (section) {
       initializeCanvas(section);
@@ -747,7 +844,6 @@
   }
 
   const observer = new MutationObserver(checkForCanvas);
-
   observer.observe(document.body, {
     childList: true,
     subtree: true
