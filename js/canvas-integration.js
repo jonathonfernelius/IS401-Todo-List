@@ -9,6 +9,53 @@
   "use strict";
 
   const client = window.tidyClient;
+
+
+  // Coursewise-style Canvas checkboxes
+  const canvasStyles = document.createElement("style");
+
+  canvasStyles.textContent = `
+    #cw-canvas-preview input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 21px;
+      height: 21px;
+      min-width: 21px;
+      border: 2px solid #d8b5c3;
+      border-radius: 7px;
+      background: white;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.15s ease;
+    }
+
+    #cw-canvas-preview input[type="checkbox"]:checked {
+      background: var(--primary, #a35b79);
+      border-color: var(--primary, #a35b79);
+    }
+
+    #cw-canvas-preview input[type="checkbox"]:checked::after {
+      content: "✓";
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    #cw-canvas-preview input[type="checkbox"]:focus-visible {
+      outline: 3px solid #eec3d6;
+      outline-offset: 3px;
+    }
+
+    #cw-canvas-preview label:hover {
+      background: rgba(163, 91, 121, 0.04);
+      border-radius: 8px;
+    }
+  `;
+
+  document.head.appendChild(canvasStyles);
+
+
   let connected = false;
 
   async function callFunction(name, body) {
@@ -121,6 +168,32 @@
       events.map((event, index) => index)
     );
 
+
+    const courseChoices = new Map();
+
+    function makeDropdown(label, options) {
+      const wrapper = document.createElement("div");
+      wrapper.style.flex = "1";
+
+      const caption = makeElement("label", label);
+      caption.style.display = "block";
+      caption.style.marginBottom = "5px";
+
+      const select = document.createElement("select");
+      select.style.width = "100%";
+
+      for (const option of options) {
+        const element = document.createElement("option");
+        element.value = option.value;
+        element.textContent = option.label;
+        select.appendChild(element);
+      }
+
+      wrapper.append(caption, select);
+      return { wrapper, select };
+    }
+
+
     const counter = makeElement("p", "");
     container.appendChild(counter);
 
@@ -175,6 +248,50 @@
       summary.style.fontWeight = "600";
 
       group.appendChild(summary);
+
+
+      const state = window.Tidy.state;
+
+      const listDropdown = makeDropdown(
+        "List for this course",
+        [
+          { value: "", label: "No list" },
+          ...state.lists.map(l => ({
+            value: String(l.id),
+            label: l.title
+          }))
+        ]
+      );
+
+      const categoryDropdown = makeDropdown(
+        "Category for this course",
+        [
+          { value: "", label: "No category" },
+          ...state.categories.map(c => ({
+            value: String(c.id),
+            label: c.name
+          }))
+        ]
+      );
+
+      const settings = document.createElement("div");
+      settings.style.display = "flex";
+      settings.style.flexWrap = "wrap";
+      settings.style.gap = "12px";
+      settings.style.marginTop = "12px";
+
+      settings.append(
+        listDropdown.wrapper,
+        categoryDropdown.wrapper
+      );
+
+      group.appendChild(settings);
+
+      courseChoices.set(course, {
+        list: listDropdown.select,
+        category: categoryDropdown.select
+      });
+
 
       // Select or deselect an entire course.
       const groupButton = makeElement(
@@ -273,11 +390,74 @@
       container.appendChild(group);
     }
 
-    container.appendChild(makeElement(
-      "p",
-      "Preview only — assignment importing and list/category settings are coming next.",
-      "muted"
-    ));
+    
+    const importButton = makeElement(
+      "button",
+      "Import Selected Assignments",
+      "btn btn-primary"
+    );
+
+    importButton.type = "button";
+    importButton.style.marginTop = "20px";
+
+    const resultMessage = makeElement("p", "");
+    resultMessage.setAttribute("role", "status");
+
+    container.append(importButton, resultMessage);
+
+    importButton.addEventListener("click", async () => {
+      const items = events
+        .filter((event, index) => selected.has(index))
+        .map(event => {
+          const choices = courseChoices.get(
+            event.course || "Unsorted"
+          );
+
+          return {
+            uid: event.uid,
+            listId: choices?.list.value || null,
+            categoryId: choices?.category.value || null
+          };
+        });
+
+      if (items.length === 0) {
+        resultMessage.textContent =
+          "Select at least one assignment.";
+        return;
+      }
+
+      if (!confirm(
+        `Import ${items.length} selected items into Coursewise?`
+      )) return;
+
+      importButton.disabled = true;
+      resultMessage.textContent = "Importing assignments...";
+
+      try {
+        const result = await callFunction(
+          "canvas-import",
+          { items }
+        );
+
+        await window.Tidy.reload();
+
+        resultMessage.textContent =
+          `${result.added} assignments imported! ` +
+          `${result.skipped} already imported or unavailable.`;
+
+        showMessage(
+          section,
+          "Import complete! Open To-do or Calendar to see your assignments."
+        );
+
+      } catch (error) {
+        resultMessage.textContent =
+          error.message + " Check your task list before retrying.";
+      } finally {
+        importButton.disabled = false;
+      }
+    });
+
   }
 
   // Requests the saved Canvas calendar from Supabase.
