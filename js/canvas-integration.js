@@ -1,9 +1,8 @@
 
 /*
   Coursewise Canvas Integration
-  Connects a user's BYU Canvas calendar feed.
-
-  Assignment importing will be added later.
+  Connect, disconnect, and preview BYU Canvas events.
+  Preview does NOT create tasks.
 */
 
 (() => {
@@ -12,8 +11,7 @@
   const client = window.tidyClient;
   let connected = false;
 
-  // Communicates with our Supabase Edge Function.
-  async function callCanvas(action, feedUrl) {
+  async function callFunction(name, body) {
     if (!client) {
       throw new Error("Supabase is not available.");
     }
@@ -21,17 +19,11 @@
     const { data: sessionData } = await client.auth.getSession();
 
     if (!sessionData?.session) {
-      throw new Error("Please sign in to Coursewise again.");
-    }
-
-    const body = { action };
-
-    if (action === "connect") {
-      body.feedUrl = feedUrl;
+      throw new Error("Please sign in again.");
     }
 
     const { data, error } = await client.functions.invoke(
-      "canvas-connect",
+      name,
       { body }
     );
 
@@ -42,10 +34,10 @@
         const response = await error.context?.json();
         explanation = response?.error || explanation;
       } catch {
-        // Use the original error message.
+        // Keep original error.
       }
 
-      throw new Error(explanation || "Could not connect to Canvas.");
+      throw new Error(explanation);
     }
 
     if (data?.error) {
@@ -55,7 +47,16 @@
     return data || {};
   }
 
-  // Displays a message on the Canvas section.
+  async function callCanvas(action, feedUrl) {
+    const body = { action };
+
+    if (action === "connect") {
+      body.feedUrl = feedUrl;
+    }
+
+    return callFunction("canvas-connect", body);
+  }
+
   function showMessage(section, text, isError = false) {
     const message = section.querySelector("#cw-canvas-message");
 
@@ -65,31 +66,297 @@
     }
   }
 
-  // Displays the connected or disconnected interface.
+  function makeElement(tag, text, className = "") {
+    const element = document.createElement(tag);
+    element.textContent = text;
+
+    if (className) {
+      element.className = className;
+    }
+
+    return element;
+  }
+
+  // Displays the assignments and groups from Canvas.
+  function displayPreview(section, events) {
+    const container = section.querySelector("#cw-canvas-preview");
+    if (!container) return;
+
+    container.replaceChildren();
+
+    const heading = makeElement(
+      "h3",
+      `Canvas Calendar Preview (${events.length} items)`
+    );
+    container.appendChild(heading);
+
+    container.appendChild(makeElement(
+      "p",
+      "Review your Canvas events. Nothing will be imported yet.",
+      "muted"
+    ));
+
+    if (events.length === 0) {
+      container.appendChild(makeElement(
+        "p",
+        "No calendar events were found."
+      ));
+      return;
+    }
+
+    // Group events by their detected course.
+    const groups = {};
+
+    for (const event of events) {
+      const course = event.course || "Unsorted";
+
+      if (!groups[course]) {
+        groups[course] = [];
+      }
+
+      groups[course].push(event);
+    }
+
+    const selected = new Set(
+      events.map((event, index) => index)
+    );
+
+    const counter = makeElement("p", "");
+    container.appendChild(counter);
+
+    function updateCounter() {
+      counter.textContent =
+        `${selected.size} of ${events.length} items selected`;
+    }
+
+    updateCounter();
+
+    const allButton = makeElement(
+      "button",
+      "Deselect All",
+      "btn btn-outline"
+    );
+    allButton.type = "button";
+
+    container.appendChild(allButton);
+
+    // Keep references to every item checkbox.
+    const checkboxes = [];
+
+    allButton.addEventListener("click", () => {
+      const selectAll = selected.size !== events.length;
+
+      if (selectAll) {
+        events.forEach((event, index) => selected.add(index));
+      } else {
+        selected.clear();
+      }
+
+      for (const checkbox of checkboxes) {
+        checkbox.checked = selectAll;
+      }
+
+      allButton.textContent = selectAll
+        ? "Deselect All"
+        : "Select All";
+
+      updateCounter();
+    });
+
+    for (const [course, courseEvents] of Object.entries(groups)) {
+      const group = document.createElement("details");
+      group.style.marginTop = "18px";
+
+      const summary = makeElement(
+        "summary",
+        `${course} (${courseEvents.length} items)`
+      );
+      summary.style.cursor = "pointer";
+      summary.style.fontWeight = "600";
+
+      group.appendChild(summary);
+
+      // Select or deselect an entire course.
+      const groupButton = makeElement(
+        "button",
+        "Select / Deselect Course",
+        "btn btn-outline"
+      );
+      groupButton.type = "button";
+      groupButton.style.marginTop = "10px";
+      groupButton.style.marginBottom = "10px";
+
+      group.appendChild(groupButton);
+
+      const courseCheckboxes = [];
+
+      for (const event of courseEvents) {
+        const index = events.indexOf(event);
+
+        const row = document.createElement("label");
+        row.style.display = "flex";
+        row.style.alignItems = "flex-start";
+        row.style.gap = "10px";
+        row.style.padding = "10px 0";
+        row.style.cursor = "pointer";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+
+        const information = document.createElement("div");
+
+        information.appendChild(
+          makeElement("strong", event.title || "Untitled")
+        );
+
+        information.appendChild(makeElement(
+          "div",
+          event.due
+            ? `Date: ${event.due}`
+            : "No date available",
+          "muted"
+        ));
+
+        if (event.kind === "calendar_event") {
+          information.appendChild(makeElement(
+            "small",
+            "Calendar event (assignment status unconfirmed)",
+            "muted"
+          ));
+        }
+
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            selected.add(index);
+          } else {
+            selected.delete(index);
+          }
+
+          updateCounter();
+          allButton.textContent =
+            selected.size === events.length
+              ? "Deselect All"
+              : "Select All";
+        });
+
+        checkboxes.push(checkbox);
+        courseCheckboxes.push({ checkbox, index });
+
+        row.appendChild(checkbox);
+        row.appendChild(information);
+        group.appendChild(row);
+      }
+
+      groupButton.addEventListener("click", () => {
+        const allChecked = courseCheckboxes.every(
+          item => item.checkbox.checked
+        );
+
+        for (const item of courseCheckboxes) {
+          item.checkbox.checked = !allChecked;
+
+          if (allChecked) {
+            selected.delete(item.index);
+          } else {
+            selected.add(item.index);
+          }
+        }
+
+        updateCounter();
+        allButton.textContent =
+          selected.size === events.length
+            ? "Deselect All"
+            : "Select All";
+      });
+
+      container.appendChild(group);
+    }
+
+    container.appendChild(makeElement(
+      "p",
+      "Preview only — assignment importing and list/category settings are coming next.",
+      "muted"
+    ));
+  }
+
+  // Requests the saved Canvas calendar from Supabase.
+  async function previewCanvas(section) {
+    const button = section.querySelector("#cw-preview-button");
+
+    button.disabled = true;
+    button.textContent = "Loading Canvas calendar...";
+    showMessage(section, "Reading Canvas calendar...");
+
+    try {
+      const result = await callFunction("canvas-preview", {});
+
+      if (!section.isConnected) return;
+
+      const events = result.events || [];
+
+      if (!Array.isArray(events)) {
+        throw new Error("Canvas returned an unexpected response.");
+      }
+
+      displayPreview(section, events);
+
+      showMessage(
+        section,
+        `Found ${events.length} calendar items.`
+      );
+
+    } catch (error) {
+      showMessage(section, error.message, true);
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = "Preview Canvas Assignments";
+      }
+    }
+  }
+
+  // Connected / disconnected screen.
   function showInterface(section) {
     if (!section.isConnected) return;
 
     const content = section.querySelector("#cw-canvas-content");
-
     if (!content) return;
 
     if (connected) {
       content.innerHTML = `
         <p><strong>Canvas calendar connected!</strong></p>
+
         <p class="muted">
-          Your calendar feed has been saved.
-          Assignment importing is coming next.
+          Your Canvas calendar is connected to Coursewise.
         </p>
+
         <button
           type="button"
-          id="cw-disconnect"
-          class="btn btn-outline"
+          id="cw-preview-button"
+          class="btn btn-primary"
         >
-          Disconnect Canvas
+          Preview Canvas Assignments
         </button>
+
+        <div id="cw-canvas-preview" style="margin-top:20px"></div>
+
+        <div style="margin-top:20px">
+          <button
+            type="button"
+            id="cw-disconnect"
+            class="btn btn-outline"
+          >
+            Disconnect Canvas
+          </button>
+        </div>
       `;
 
-      const disconnectButton = content.querySelector("#cw-disconnect");
+      content.querySelector("#cw-preview-button")
+        .addEventListener("click", () => previewCanvas(section));
+
+      const disconnectButton =
+        content.querySelector("#cw-disconnect");
 
       disconnectButton.addEventListener("click", async () => {
         if (!confirm("Disconnect your Canvas calendar?")) return;
@@ -103,6 +370,7 @@
           connected = false;
           showInterface(section);
           showMessage(section, "Canvas disconnected.");
+
         } catch (error) {
           showMessage(section, error.message, true);
           disconnectButton.disabled = false;
@@ -129,7 +397,7 @@
             <small>
               In Canvas, open Calendar and select
               Calendar Feed to copy your link.
-              Keep this URL private.
+              Keep the URL private.
             </small>
           </div>
 
@@ -146,15 +414,12 @@
 
         const button = form.querySelector("button");
         const input = form.querySelector("#cw-canvas-url");
-        const url = input.value.trim();
-
-        if (!url) return;
 
         button.disabled = true;
         showMessage(section, "Connecting to Canvas...");
 
         try {
-          await callCanvas("connect", url);
+          await callCanvas("connect", input.value.trim());
 
           input.value = "";
           connected = true;
@@ -170,11 +435,9 @@
     }
   }
 
-  // Prepares the Canvas section on the Profile page.
+  // Initializes Canvas when Profile renders.
   async function initializeCanvas(section) {
-    if (section.dataset.canvasInitialized === "true") {
-      return;
-    }
+    if (section.dataset.canvasInitialized === "true") return;
 
     section.dataset.canvasInitialized = "true";
 
@@ -226,19 +489,17 @@
         </button>
       `;
 
-      content.querySelector("#cw-retry").addEventListener(
-        "click",
-        () => {
+      content.querySelector("#cw-retry")
+        .addEventListener("click", () => {
           delete section.dataset.canvasInitialized;
           initializeCanvas(section);
-        }
-      );
+        });
 
       showMessage(section, error.message, true);
     }
   }
 
-  // Finds the Canvas section whenever Profile renders.
+  // Profile can dynamically recreate its Canvas section.
   function checkForCanvas() {
     const section = document.getElementById("canvas");
 
@@ -247,8 +508,6 @@
     }
   }
 
-  // The Profile page is rendered dynamically,
-  // so watch for the Canvas section to appear.
   const observer = new MutationObserver(checkForCanvas);
 
   observer.observe(document.body, {
