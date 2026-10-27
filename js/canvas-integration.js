@@ -518,11 +518,54 @@
 
     // Save checked/unchecked status, lists, and categories.
     async function saveSelections() {
-      return callFunction("canvas-selections", {
-        action: "save",
-        items: selectedItems()
-      });
-    }
+        const items = selectedItems();
+
+        const ids = items.map(item => item.uid);
+
+        const duplicateCount = ids.length - new Set(ids).size;
+
+        const invalidUIDs = items.filter(item =>
+            typeof item.uid !== "string" ||
+            !item.uid ||
+            item.uid.length > 500
+        ).length;
+
+        const invalidLists = items.filter(item =>
+            item.listId != null &&
+            !/^\d+$/.test(String(item.listId))
+        ).length;
+
+        const invalidCategories = items.filter(item =>
+            item.categoryId != null &&
+            !/^\d+$/.test(String(item.categoryId))
+        ).length;
+
+        console.table({
+            total: items.length,
+            duplicateUIDs: duplicateCount,
+            invalidUIDs,
+            invalidLists,
+            invalidCategories
+        });
+
+        // Don't save anything if validation fails.
+        if (
+            duplicateCount ||
+            invalidUIDs ||
+            invalidLists ||
+            invalidCategories
+        ) {
+            throw new Error(
+            "Selection validation failed. Check the console."
+            );
+        }
+
+        return callFunction("canvas-selections", {
+            action: "save",
+            items
+        });
+     }
+
 
     // Updates existing tasks and remembers new-item choices.
     updateButton.addEventListener("click", async () => {
