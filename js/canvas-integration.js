@@ -58,6 +58,12 @@
 
   let connected = false;
 
+
+  // Remember Canvas preview choices while this page is open.
+  const assignmentChoices = new Map();
+  const coursePreferences = new Map();
+
+
   async function callFunction(name, body) {
     if (!client) {
       throw new Error("Supabase is not available.");
@@ -164,9 +170,19 @@
       groups[course].push(event);
     }
 
-    const selected = new Set(
-      events.map((event, index) => index)
-    );
+    
+    const selected = new Set();
+
+    events.forEach((event, index) => {
+      if (!assignmentChoices.has(event.uid)) {
+        assignmentChoices.set(event.uid, true);
+      }
+
+      if (assignmentChoices.get(event.uid)) {
+        selected.add(index);
+      }
+    });
+
 
 
     const courseChoices = new Map();
@@ -225,9 +241,15 @@
         selected.clear();
       }
 
+      
       for (const checkbox of checkboxes) {
         checkbox.checked = selectAll;
       }
+
+      events.forEach(event => {
+        assignmentChoices.set(event.uid, selectAll);
+      });
+
 
       allButton.textContent = selectAll
         ? "Deselect All"
@@ -287,10 +309,36 @@
 
       group.appendChild(settings);
 
+      
+      const saved = coursePreferences.get(course);
+
+      if (saved) {
+        listDropdown.select.value = saved.list;
+        categoryDropdown.select.value = saved.category;
+      }
+
+      function saveCoursePreferences() {
+        coursePreferences.set(course, {
+          list: listDropdown.select.value,
+          category: categoryDropdown.select.value
+        });
+      }
+
+      listDropdown.select.addEventListener(
+        "change",
+        saveCoursePreferences
+      );
+
+      categoryDropdown.select.addEventListener(
+        "change",
+        saveCoursePreferences
+      );
+
       courseChoices.set(course, {
         list: listDropdown.select,
         category: categoryDropdown.select
       });
+
 
 
       // Select or deselect an entire course.
@@ -344,11 +392,15 @@
         }
 
         checkbox.addEventListener("change", () => {
+          
+          assignmentChoices.set(event.uid, checkbox.checked);
+
           if (checkbox.checked) {
             selected.add(index);
           } else {
             selected.delete(index);
           }
+
 
           updateCounter();
           allButton.textContent =
@@ -372,6 +424,12 @@
 
         for (const item of courseCheckboxes) {
           item.checkbox.checked = !allChecked;
+
+          assignmentChoices.set(
+            events[item.index].uid,
+            !allChecked
+          );
+
 
           if (allChecked) {
             selected.delete(item.index);
