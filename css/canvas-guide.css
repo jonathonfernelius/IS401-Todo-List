@@ -1,0 +1,30 @@
+/* Canvas link guide: compact inline panel under the URL field. Flat theme colors only (no oklch mixing with white, which swings the hue). */
+.cg-trigger{align-self:flex-start;display:inline-flex;align-items:center;gap:.5rem;width:fit-content;margin:.7rem 0 0;padding:.35rem .8rem .35rem .4rem;min-height:2.2rem;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--primary-dark);font:inherit;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s}
+.cg-trigger:hover{background:var(--muted)}
+.cg-q{display:grid;place-items:center;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--primary);color:var(--primary-fg);font-size:.75rem;font-weight:700}
+.cg-chev{display:inline-block;font-size:1.1rem;line-height:1;transition:transform .25s}
+.cg-trigger[aria-expanded="true"] .cg-chev{transform:rotate(90deg)}
+
+.cg-panel{width:100%;max-width:26rem;margin-top:.7rem;padding:.9rem;border-radius:1.25rem;background:var(--muted);color:var(--fg)}
+.cg-panel[hidden]{display:none}
+
+/* Frames are transparent 800×520 images with the subject centered, so the panel color is the only background. */
+.cg-image{display:block;width:100%;height:auto;aspect-ratio:800/520;margin:0 auto}
+.cg-copy{display:grid;margin:.4rem .2rem 0}
+/* All three texts share one grid cell, so the panel never changes height between steps. */
+.cg-text{grid-area:1/1;visibility:hidden;opacity:0;transition:opacity .22s}
+.cg-text.is-on{visibility:visible;opacity:1}
+.cg-text h4{margin:0 0 .2rem;font-family:var(--font-display);font-size:1.02rem;font-weight:600}
+.cg-text p{margin:0;font-size:.86rem;line-height:1.5;color:var(--muted-fg)}
+
+.cg-nav{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin:.8rem 0 0}
+.cg-nav .btn{min-height:2.3rem;padding:0 1rem;font-size:.85rem}
+.cg-back{background:var(--card);border-color:var(--border)}
+.cg-back:disabled{opacity:.4}
+.cg-dots{display:flex;gap:.1rem}
+.cg-dot{position:relative;width:1.6rem;height:1.6rem;border:0;background:none;cursor:pointer;padding:0}
+.cg-dot::after{content:"";position:absolute;inset:50% auto auto 50%;width:.5rem;height:.5rem;margin:-.25rem 0 0 -.25rem;border-radius:999px;background:var(--border);transition:width .25s,margin .25s,background .25s}
+.cg-dot.is-active::after{width:1.3rem;margin-left:-.65rem;background:var(--primary)}
+
+.cg-trigger:focus-visible,.cg-panel button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.cg-chev,.cg-text,.cg-dot::after{transition:none}}

@@ -799,6 +799,8 @@
         </form>
       `;
 
+      window.mountCanvasGuide?.(content);
+
       const form =
         content.querySelector("#cw-canvas-form");
 
