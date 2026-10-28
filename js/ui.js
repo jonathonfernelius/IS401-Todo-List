@@ -11,6 +11,7 @@
     repeat: svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
     home: svg('<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-7h6v7"/>'),
     list: svg('<path d="M8 6h12M8 12h12M8 18h12"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+    grip: svg('<circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/>'),
     calendar: svg('<rect x="3" y="4.5" width="18" height="17" rx="2"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/>'),
     user: svg('<circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/>')
   };
@@ -38,9 +39,10 @@
     d.showModal(); return d;
   }
 
-  function taskRow(t, { edit = true, date = true, overdue = false } = {}) {
+  function taskRow(t, { edit = true, date = true, overdue = false, draggable = false } = {}) {
     const c = T.cat(t.categoryId);
-    return `<div class="task${t.done ? " done" : ""}${overdue ? " overdue" : ""}">
+    return `<div class="task${t.done ? " done" : ""}${overdue ? " overdue" : ""}"${draggable ? ` data-task-id="${esc(t.id)}"` : ""}>
+      ${draggable ? `<button type="button" class="task-drag" draggable="true" data-drag-task="${esc(t.id)}" aria-label="Reorder or move task ${esc(t.title)}" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" title="Drag to reorder or move; use arrow keys">${icons.grip}</button>` : ""}
       <button class="check${t.done ? " on" : ""}" data-toggle="${t.id}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}">${t.done ? icons.check : ""}</button>
       <div class="task-body"><p class="task-title">${esc(t.title)}</p><div class="task-meta">
         ${c ? `<span class="chip t-${c.tone}">${esc(c.name)}</span>` : ""}

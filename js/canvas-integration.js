@@ -18,6 +18,31 @@
 
   const style = document.createElement("style");
   style.textContent = `
+    .cw-connection-status {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .cw-status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #218668;
+      flex-shrink: 0;
+    }
+
+    .cw-disconnect-action {
+      margin-top: 20px;
+    }
+
+    .cw-disconnect-action .btn {
+      font-size: 14px;
+    }
+
     #cw-canvas-preview input[type="checkbox"] {
       appearance: none;
       -webkit-appearance: none;
@@ -202,8 +227,8 @@
   }
 
   // Read stored choices and imported task IDs.
-  async function loadSelections(events) {
-    const result = await callFunction(
+  async function loadSelections(events, savedResult = null) {
+    const result = savedResult ?? await callFunction(
       "canvas-selections",
       { action: "load" }
     );
@@ -681,9 +706,14 @@
     message(section, "Reading Canvas calendar...");
 
     try {
-      const result = await callFunction(
-        "canvas-preview", {}
-      );
+      console.time("Canvas parallel fetch");
+
+      const [result, savedResult] = await Promise.all([
+        callFunction("canvas-preview", {}),
+        callFunction("canvas-selections", { action: "load" })
+      ]);
+
+      console.timeEnd("Canvas parallel fetch");
 
       if (!section.isConnected) return;
 
@@ -693,10 +723,20 @@
         throw new Error("Unexpected Canvas response.");
       }
 
-      const imported = await loadSelections(events);
+      console.time("Canvas selections processing");
+
+      const imported = await loadSelections(events, savedResult);
+
+      console.timeEnd("Canvas selections processing");
 
       previewData = { events, imported };
+
+      console.time("Canvas rendering");
+
       renderPreview(section, events, imported);
+
+      console.timeEnd("Canvas rendering");
+
 
       message(
         section,
@@ -708,8 +748,7 @@
     } finally {
       if (button.isConnected) {
         button.disabled = false;
-        button.textContent = "Preview Canvas Assignments";
-      }
+        button.textContent = "Preview Assignments";      }
     }
   }
 
@@ -721,23 +760,32 @@
 
     if (connected) {
       content.innerHTML = `
-        <p><strong>Canvas calendar connected!</strong></p>
+        <div class="cw-connection-status">
+          <span class="cw-status-dot" aria-hidden="true"></span>
+          <span>Canvas connected</span>
+        </div>
+
         <p class="muted">
-          Manage assignments from your BYU Canvas calendar.
+          Preview and manage assignments from your BYU Canvas calendar.
         </p>
+
         <button
           type="button"
           id="cw-preview-button"
           class="btn btn-primary"
         >
-          Preview Canvas Assignments
+          Preview Assignments
         </button>
+
         <div id="cw-canvas-preview"
-             style="margin-top:20px"></div>
-        <div style="margin-top:20px">
-          <button type="button"
-                  id="cw-disconnect"
-                  class="btn btn-outline">
+            style="margin-top:20px"></div>
+
+        <div class="cw-disconnect-action">
+          <button
+            type="button"
+            id="cw-disconnect"
+            class="btn btn-outline"
+          >
             Disconnect Canvas
           </button>
         </div>
@@ -775,6 +823,9 @@
 
     } else {
       content.innerHTML = `
+        <p class="muted">
+          Import your BYU Canvas assignments into CourseWise.
+        </p>
         <form id="cw-canvas-form" class="form">
           <div class="field">
             <label for="cw-canvas-url">
@@ -844,16 +895,13 @@
       <div class="section-head">
         <h2>Canvas Integration</h2>
       </div>
-      <p class="muted">
-        Connect your BYU Canvas calendar to Coursewise.
-      </p>
       <div id="cw-canvas-content">
         <p class="muted">Checking Canvas connection...</p>
       </div>
       <p id="cw-canvas-message"
-         role="status"
-         aria-live="polite"
-         style="margin-top:12px"></p>
+        role="status"
+        aria-live="polite"
+        style="margin-top:12px"></p>
     `;
 
     try {

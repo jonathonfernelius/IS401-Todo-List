@@ -88,6 +88,12 @@ main{flex:1;padding:2.5rem 0 4rem}
 .count.warn{background:var(--danger-soft);color:var(--danger)}
 .task-list{display:grid;gap:.6rem}
 .task{display:flex;align-items:flex-start;gap:.8rem;padding:.85rem;border-radius:1rem;background:var(--bg);border:1px solid var(--border)}
+.task-drag{flex:none;display:grid;place-items:center;width:1.5rem;height:1.5rem;margin-top:.05rem;padding:0;border:0;border-radius:.45rem;background:transparent;color:var(--muted-fg);cursor:grab}
+.task-drag:hover{background:var(--muted);color:var(--fg)}
+.task-drag:active{cursor:grabbing}
+.task-drag svg{width:1rem;height:1rem}
+.task.is-dragging{opacity:.45}
+.list-card.is-drop-target{border:1px solid var(--primary)}
 .task.overdue{background:var(--danger-soft);border-color:var(--danger-line)}
 .overdue-card h2{color:var(--danger)}
 .task-body{flex:1;min-width:0}
@@ -120,6 +126,11 @@ main{flex:1;padding:2.5rem 0 4rem}
 .lists{display:grid;gap:1rem;max-width:52rem}
 .list-card{padding:1.1rem 1.25rem}
 .list-head{display:flex;align-items:center;gap:.4rem}
+.list-drag{flex:none;display:grid;place-items:center;width:2rem;height:2rem;padding:0;border:0;border-radius:.6rem;background:transparent;color:var(--muted-fg);cursor:grab}
+.list-drag:hover{background:var(--muted);color:var(--fg)}
+.list-drag:active{cursor:grabbing}
+.list-drag svg{width:1rem;height:1rem}
+.list-card.is-dragging{opacity:.55}
 .list-toggle{display:flex;flex:1;align-items:center;gap:.5rem;min-width:0;padding:.3rem 0;border:0;background:none;text-align:left}
 .list-toggle h2{font-size:1.1rem;font-weight:600}
 .list-toggle svg{width:1rem;height:1rem;color:var(--muted-fg);transition:transform .2s}
