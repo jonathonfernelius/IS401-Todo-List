@@ -42,7 +42,7 @@
     .cw-disconnect-action .btn {
       font-size: 14px;
     }
-      
+
     #cw-canvas-preview input[type="checkbox"] {
       appearance: none;
       -webkit-appearance: none;
@@ -227,8 +227,8 @@
   }
 
   // Read stored choices and imported task IDs.
-  async function loadSelections(events) {
-    const result = await callFunction(
+  async function loadSelections(events, savedResult = null) {
+    const result = savedResult ?? await callFunction(
       "canvas-selections",
       { action: "load" }
     );
@@ -706,9 +706,14 @@
     message(section, "Reading Canvas calendar...");
 
     try {
-      const result = await callFunction(
-        "canvas-preview", {}
-      );
+      console.time("Canvas parallel fetch");
+
+      const [result, savedResult] = await Promise.all([
+        callFunction("canvas-preview", {}),
+        callFunction("canvas-selections", { action: "load" })
+      ]);
+
+      console.timeEnd("Canvas parallel fetch");
 
       if (!section.isConnected) return;
 
@@ -718,10 +723,20 @@
         throw new Error("Unexpected Canvas response.");
       }
 
-      const imported = await loadSelections(events);
+      console.time("Canvas selections processing");
+
+      const imported = await loadSelections(events, savedResult);
+
+      console.timeEnd("Canvas selections processing");
 
       previewData = { events, imported };
+
+      console.time("Canvas rendering");
+
       renderPreview(section, events, imported);
+
+      console.timeEnd("Canvas rendering");
+
 
       message(
         section,
