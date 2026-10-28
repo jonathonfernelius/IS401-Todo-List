@@ -35,6 +35,18 @@ Students often struggle to manage assignments and deadlines across multiple cour
 20. The task is now created and can be viewed in the today / to-do / calendar pages.
 21. Mark the task off as complete when finished.
 
+## Applying the list-ordering migration
+To enable persistent list ordering on an existing Supabase project:
+1. Open the project's Supabase SQL Editor.
+2. Run `supabase/migrations/20261027000000_list_sort_order.sql` once if it has not already been applied.
+3. Run `supabase/migrations/20261027010000_task_sort_order.sql` once to enable persistent task ordering and moving tasks between lists.
+4. Deploy the updated site.
+
+The migrations keep existing list and task order, then enable new lists and
+tasks to be added at the bottom. Users can drag lists and tasks into a saved
+order, and move tasks between lists. Run both migrations to enable both
+features; the task-order migration can also be run independently.
+
 ## Verifying the Vertical Slice
 To verify that the account creation vertical slice is working:
 1. Open the website.

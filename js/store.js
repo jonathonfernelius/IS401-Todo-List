@@ -69,7 +69,7 @@
       due: d ? (r.HasDueTime ? toKey(d) : r.TaskDueDate.slice(0,10)) : null,
       time: d && r.HasDueTime ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : null,
       reminder: r.Reminder, done: r.IsComplete, repeat: parseRepeat(r.Repeating),
-      occ: r.Occurrence, spawned: id(r.SpawnedTaskID), fromCanvas: r.IsAssignment };
+      occ: r.Occurrence, spawned: id(r.SpawnedTaskID), fromCanvas: r.IsAssignment, sortOrder: r.SortOrder };
   }
   function dueStamp(p) { return p.due ? (p.time ? new Date(`${p.due}T${p.time}:00`).toISOString() : `${p.due}T00:00:00.000Z`) : null; }
   function taskToRow(p) {
@@ -93,16 +93,17 @@
       result(db.from('User').select('UserID,FirstName,LastName,Username').eq('UserID', owner).single()),
       result(db.from('Settings').select('ColorTheme,WeekStart,ShowDone').eq('UserID', owner).single()),
       allRows('Categories','CategoryID,DisplayName,DisplayColor','CategoryID'),
-      allRows('Lists','ListID,Title','ListID'),
+      allRows('Lists','ListID,Title,SortOrder','SortOrder'),
       allRows('Tasks','*','TaskID')
     ]);
     state = { signedIn: true, user: { first: profile.FirstName, last: profile.LastName, username: profile.Username, email: authUser.email || '' },
       prefs: { theme: THEMES.some(t => t[0]===settings.ColorTheme) ? settings.ColorTheme : 'green', weekStart: settings.WeekStart, showDone: settings.ShowDone },
       categories: categories.map(c => ({id:id(c.CategoryID),name:c.DisplayName,tone:tones.includes(c.DisplayColor)?c.DisplayColor:'slate'})),
-      lists: lists.map(l => ({id:l.ListID,title:l.Title})),
+      lists: lists.map(l => ({id:id(l.ListID),title:l.Title,order:l.SortOrder})),
       tasks: tasks
         .filter(task => !task.CanvasExcluded)
-        .map(taskFromRow),
+        .map(taskFromRow)
+        .sort((a,b) => a.sortOrder-b.sortOrder || a.id.localeCompare(b.id)),
       canvasConnected: false };
     if (window.CoursewiseTheme) window.CoursewiseTheme.apply(state.prefs.theme);
     else document.documentElement.dataset.theme = state.prefs.theme;
@@ -151,8 +152,23 @@
     },
     async updateCategory(n,p) { await write(db.from('Categories').update({DisplayName:p.name,DisplayColor:p.tone}).eq('CategoryID',n).eq('UserID',owner).select('CategoryID').single()); },
     async deleteCategory(n) { await write(db.rpc('tidy_delete_category',{p_id:n})); },
-    async addTask(p) { await write(db.from('Tasks').insert({...taskToRow(p),UserID:owner,IsComplete:false,IsAssignment:false})); },
-    async updateTask(n,p) { await write(db.from('Tasks').update(taskToRow(p)).eq('TaskID',n).eq('UserID',owner).select('TaskID').single()); },
+    async addTask(p) {
+      const sortOrder=Math.max(-1,...state.tasks.filter(t=>t.listId===p.listId).map(t=>t.sortOrder))+1;
+      await write(db.from('Tasks').insert({...taskToRow(p),SortOrder:sortOrder,UserID:owner,IsComplete:false,IsAssignment:false}));
+    },
+    async updateTask(n,p) {
+      const task=state.tasks.find(t=>t.id===n), row=taskToRow(p);
+      if (task && task.listId!==p.listId) row.SortOrder=Math.max(-1,...state.tasks.filter(t=>t.listId===p.listId).map(t=>t.sortOrder))+1;
+      await write(db.from('Tasks').update(row).eq('TaskID',n).eq('UserID',owner).select('TaskID').single());
+    },
+    async reorderTasks(taskId,targetListId,targetTaskIds,sourceTaskIds) {
+      await write(db.rpc('tidy_reorder_tasks',{
+        p_task_id:taskId,
+        p_target_list_id:targetListId,
+        p_target_task_ids:targetTaskIds,
+        p_source_task_ids:sourceTaskIds
+      }));
+    },
     async deleteTask(n) { await write(db.from('Tasks').delete().eq('TaskID',n).eq('UserID',owner).select('TaskID').single()); },
     async toggleTask(n) {
       const t=state.tasks.find(t=>t.id===n); if (!t) throw new Error('Task not found. Reload the page.');
@@ -166,9 +182,11 @@
       return {done:!t.done,next,ended};
     },
     async addList(title) {
-      const l=await result(db.from('Lists').insert({UserID:owner,Title:title}).select('ListID').single());
-      await refreshAfterSave(); return state.lists.find(v=>v.id===l.ListID);
+      const order=Math.max(-1,...state.lists.map(l=>l.order))+1;
+      const l=await result(db.from('Lists').insert({UserID:owner,Title:title,SortOrder:order}).select('ListID').single());
+      await refreshAfterSave(); return state.lists.find(v=>v.id===id(l.ListID));
     },
+    async reorderLists(listIds) { await write(db.rpc('tidy_reorder_lists',{p_list_ids:listIds})); },
     async renameList(n,title) { await write(db.rpc('tidy_rename_list',{p_id:n,p_title:title})); },
     async deleteList(n) { await write(db.from('Lists').delete().eq('ListID',n).eq('UserID',owner).select('ListID').single()); }
   };
