@@ -1,19 +1,14 @@
 # Coursewise admin setup
 
-This package adds admin.html, css/admin.css, js/admin.js, js/admin-link.js,
-and supabase/admin-setup.sql. It adds the admin-link script to home.html,
-todo.html, calendar.html, and profile.html. Existing app behavior is retained.
+The admin page keeps the existing `coursewise_is_admin()` permission check. Admin is a permission granted to selected signed-in accounts; it is not a separate account type. Supabase remains the authorization boundary.
 
-## 1. Install the database additions
-Open your Coursewise project in Supabase → SQL Editor → New query.
-Paste all of supabase/admin-setup.sql and run it once.
-It runs in a transaction and adds dedicated admin/OKR tables, RLS policies,
-and three RPC functions. It does not alter existing user/task tables or their policies.
-If you see “already exists,” do not drop tables: check whether setup already ran.
+## 1. Install the existing admin setup
 
-## 2. Give your existing account admin access
-In Supabase → Authentication → Users, find your own existing Coursewise login
-and copy its User UID. Replace YOUR_AUTH_USER_UUID below and run in SQL Editor:
+In the Coursewise Supabase project, open **SQL Editor** and run `supabase/admin-setup.sql` once. It creates the existing admin permission table, RLS policies, and admin-only aggregate functions. If this setup was already applied, do not drop or recreate its tables.
+
+## 2. Grant the existing admin permission
+
+In Supabase **Authentication → Users**, copy the UID of each existing account that should administer Coursewise. Replace the placeholder below and run it in SQL Editor:
 
 ```sql
 insert into public.coursewise_admins (user_id)
@@ -21,63 +16,34 @@ values ('YOUR_AUTH_USER_UUID'::uuid)
 on conflict (user_id) do nothing;
 ```
 
-Use the UUID from Authentication, not the text UserID from the public User table.
-Repeat only for teammates who should manage goals and see aggregate site stats.
-No extra password or service-role key is needed. Normal users cannot grant themselves admin access.
-To remove access later:
+Use the Auth UID, not the `UserID` from the public profile table. To remove permission later:
 
 ```sql
 delete from public.coursewise_admins
 where user_id = 'YOUR_AUTH_USER_UUID'::uuid;
 ```
 
-## 3. Update GitHub
-Copy the contents of the coursewise folder into your existing website repository,
-replacing matching files. Keep index.html at the repository root. Commit and push
-with GitHub Desktop, then wait for GitHub Pages to deploy.
+## 3. Enable task activity analytics
 
-Log in with your admin account. The Admin link appears in the main navigation.
-You can also open admin.html alongside home.html on your website.
-If the link does not appear, reload after completing steps 1 and 2.
+Run `supabase/admin-activity.sql` once after `admin-setup.sql`. This adds a protected activity log and the `coursewise_admin_activity` aggregate function. It does not change the existing admin permission table or policies, and it does not add columns to `User` or `Tasks`.
 
-## 4. Enter the team's goals
-Create an objective, owner/team, period, optional deadline, and status.
-Add key results with a starting value, target, and unit. Both increasing goals
-(0 → 100 students) and decreasing goals (10 → 3 minutes) are supported.
-Use Check in to update a result and add a note. Supabase saves both atomically.
-Edit result changes its definition; Check in changes its measured value.
-Refresh gets other admins' changes. Export downloads objectives, results, and
-all retained check-ins as JSON. There is no import feature in this version.
-Deleting objectives/results also deletes their dependent check-ins; export first
-if you need to retain those records.
+The migration seeds a current-state snapshot for existing tasks and uses the existing `TaskCreationDate` values to identify accounts that added tasks in the last 30 days. A trigger records task creation, completion, reopening, due-date/source changes, and deletion from then on. Previous completion dates cannot be recovered, so completion trends and active-user status based on completing tasks are available only from setup onward.
 
-## What the statistics mean
-- Registered profiles: rows in public.User, not auth.users.
-- New profiles: UserCreationDate in the last 30 days (timestamps interpreted as UTC).
-- Tasks created: currently retained rows in Tasks; deleted tasks are excluded.
-- Completion rate: IsComplete=true divided by all currently retained tasks.
-- Assignment tasks: rows with IsAssignment=true.
-- New tasks: TaskCreationDate in the last 30 days.
+The dashboard defines:
 
-These are all-app aggregates delivered by an admin-checked function. The page
-does not fetch other people's task text, email addresses, passwords, or Canvas tokens.
-Weekly active users, retention, and completion-by-week are not shown because the
-provided schema does not contain the necessary historical events. OKR values are
-manual; they are not automatically linked to these site totals.
+- **Overdue:** incomplete, non-excluded tasks past their due date. Date-only tasks become overdue the next day; tasks with a due time become overdue after that time.
+- **Active user:** an account that added or completed a task in the last 30 days.
+- **Completed-to-overdue ratio:** completion events during the selected range divided by the current overdue task count.
+- **Canvas filter:** tasks marked `IsAssignment`; non-Canvas tasks are not marked as assignments.
 
-## Validation and limits
-JavaScript syntax checks passed. In an isolated UI test using mock Supabase
-responses, checked objective creation, decreasing-target progress, check-in notes,
-filters, and the non-admin blocked screen. The test fixtures are not in this ZIP.
-The migration has not been executed against your project. Actual RLS and shared
-persistence must be verified after applying the SQL:
-1. An admin can create an objective, add a result, and save a check-in.
-2. After reloading, the data remains. Another admin sees it after Refresh.
-3. A normal signed-in account is denied at admin.html and cannot select/modify
-   the OKR tables or call coursewise_admin_stats/coursewise_check_in.
-4. A logged-out browser cannot retrieve admin data.
-5. Compare the aggregate totals with the Supabase tables.
+The time-range menu offers one week, one month, six months, and one year. Historical overdue counts are reconstructed from task state changes recorded after setup. Existing tasks contribute to the current overdue count immediately, but do not create pre-setup history.
 
-The UI alone is not an access control. Keep the SQL policies and RPC checks.
-Do not put a service-role key in frontend code. Existing app RLS was not changed
-or audited by this update. This package has not been pushed to your GitHub repo.
+## 4. Deploy the page
+
+Copy the updated `admin.html`, `css/admin.css`, and `js/admin.js` into the repository, along with `supabase/admin-activity.sql` and this setup note. Keep the files at the same paths, then deploy the site. The page uses the existing public Supabase client configuration; do not put a service-role key in frontend code.
+
+The four OKR cards are present. **Tasks completed vs. overdue** is connected to Supabase and has live metrics and charts. The other three cards are ready placeholders until their metric definitions and data sources are added. Canvas connection rate will need a separate admin-safe aggregate of Canvas connection status; the current project only exposes per-account status through a server function.
+
+## Data access
+
+The analytics RPC checks `coursewise_is_admin()` and returns aggregate counts and time-series points only. The page does not fetch other users' task names, email addresses, passwords, or Canvas tokens. The activity table has RLS enabled and no direct browser grants. Do not add a service-role key to client code.
