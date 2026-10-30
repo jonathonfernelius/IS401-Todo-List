@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>OKR Tracker — Coursewise</title>
   <link rel="icon" href="assets/coursewise-favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +16,9 @@
   <a class="sr-only" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="container header-row">
-      <a class="brand" href="home.html" aria-label="Coursewise home"><img class="brand-logo brand-logo-themed" src="assets/coursewise-logo-green.png" alt="Coursewise"></a>
+      <a class="brand" href="home.html" aria-label="Coursewise home">
+        <span class="brand-logo brand-logo-themed" aria-hidden="true"></span>
+      </a>
       <nav class="nav" aria-label="Main">
         <a href="home.html">Today</a>
         <a href="todo.html">To-do</a>
@@ -30,6 +32,7 @@
 
   <main id="main" class="container admin-page">
     <div id="access" role="status" aria-live="polite">Checking admin access…</div>
+
     <div id="dashboard" hidden>
       <section class="okr-heading" aria-labelledby="page-title">
         <div>
@@ -70,13 +73,15 @@
                 <option value="365">Past year</option>
               </select>
             </label>
-            <fieldset class="segmented-control">
+
+            <fieldset class="segmented-control" id="source-filter">
               <legend>Task source</legend>
               <label><input type="radio" name="source" value="all" checked><span>All tasks</span></label>
               <label><input type="radio" name="source" value="canvas"><span>Canvas</span></label>
               <label><input type="radio" name="source" value="non_canvas"><span>Non-Canvas</span></label>
             </fieldset>
-            <label class="control-field">User activity
+
+            <label class="control-field" id="activity-filter-field">User activity
               <select id="activity-filter" aria-label="Filter by user activity">
                 <option value="all" selected>All users</option>
                 <option value="active">Active in last 30 days</option>
@@ -85,26 +90,164 @@
             <button class="btn btn-secondary refresh-button" id="refresh" type="button">Refresh</button>
           </div>
 
-          <p class="definition-note">Overdue means incomplete tasks past their due date. Date-only tasks become overdue the next day; tasks with a due time become overdue after that time. “Active” means a user added or completed a task in the last 30 days.</p>
+          <p class="definition-note" id="definition-note"></p>
           <p id="stats-error" class="error-message" role="alert" hidden></p>
-          <div id="metrics" class="metric-grid" aria-live="polite">
-            <div class="metric-card"><span>Completed this period</span><strong id="completed-value">—</strong><small id="completed-change">Task completion events</small></div>
-            <div class="metric-card overdue-metric"><span>Currently overdue</span><strong id="overdue-value">—</strong><small>Incomplete tasks past due</small></div>
-            <div class="metric-card"><span>Completed-to-overdue ratio</span><strong id="ratio-value">—</strong><small>Period completions ÷ current overdue</small></div>
-            <div class="metric-card source-metric"><span>Canvas vs. non-Canvas</span><div class="source-bars" id="source-bars" aria-label="Completed task source comparison"></div><small id="source-summary">Completed tasks by source</small></div>
-          </div>
 
-          <div class="chart-grid" id="chart-grid">
-            <section class="chart-card" aria-labelledby="volume-chart-title">
-              <div class="chart-heading"><h3 id="volume-chart-title">Completed tasks and overdue backlog</h3><span class="chart-help" title="Completion events and overdue tasks at each period end">ⓘ</span></div>
-              <div id="volume-chart" class="chart-host"></div>
-            </section>
-            <section class="chart-card" aria-labelledby="ratio-chart-title">
-              <div class="chart-heading"><h3 id="ratio-chart-title">Completion vs. overdue ratio</h3><span class="chart-help" title="Completions in each period divided by overdue tasks at period end">ⓘ</span></div>
-              <div id="ratio-chart" class="chart-host"></div>
-            </section>
-          </div>
-          <p class="chart-footnote" id="chart-footnote"></p>
+          <!-- Retention: completions during the period compared with the overdue backlog. -->
+          <section class="analytics-panel" id="panel-completed-overdue" aria-label="Tasks completed versus overdue">
+            <div class="metric-grid">
+              <div class="metric-card">
+                <span>Completed this period</span>
+                <strong id="completed-value">—</strong>
+                <small id="completed-change">Task completion events</small>
+              </div>
+              <div class="metric-card overdue-metric">
+                <span>Currently overdue</span>
+                <strong id="overdue-value">—</strong>
+                <small>Incomplete tasks past due</small>
+              </div>
+              <div class="metric-card">
+                <span>Completed-to-overdue ratio</span>
+                <strong id="ratio-value">—</strong>
+                <small>Period completions ÷ current overdue</small>
+              </div>
+              <div class="metric-card source-metric">
+                <span>Canvas vs. non-Canvas</span>
+                <div class="source-bars" id="source-bars" aria-label="Completed task source comparison"></div>
+                <small id="source-summary">Completed tasks by source</small>
+              </div>
+            </div>
+
+            <div class="chart-grid">
+              <section class="chart-card" aria-labelledby="volume-chart-title">
+                <div class="chart-heading">
+                  <h3 id="volume-chart-title">Completed tasks and overdue backlog</h3>
+                  <span class="chart-help" title="Completion events and overdue tasks at each period end">ⓘ</span>
+                </div>
+                <div id="volume-chart" class="chart-host"></div>
+              </section>
+              <section class="chart-card" aria-labelledby="ratio-chart-title">
+                <div class="chart-heading">
+                  <h3 id="ratio-chart-title">Completion vs. overdue ratio</h3>
+                  <span class="chart-help" title="Completions in each period divided by overdue tasks at period end">ⓘ</span>
+                </div>
+                <div id="ratio-chart" class="chart-host"></div>
+              </section>
+            </div>
+            <p class="chart-footnote" id="completed-footnote"></p>
+          </section>
+
+          <!-- Retention: both task volume and the share of accounts completing a task each day. -->
+          <section class="analytics-panel" id="panel-completed-per-day" aria-label="Daily task completion" hidden>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <span>Tasks completed</span>
+                <strong id="daily-completions-value">—</strong>
+                <small>Completion events in this range</small>
+              </div>
+              <div class="metric-card">
+                <span>Average tasks per day</span>
+                <strong id="daily-average-tasks-value">—</strong>
+                <small>Average across days in this range</small>
+              </div>
+              <div class="metric-card">
+                <span>People completing per day</span>
+                <strong id="daily-completers-value">—</strong>
+                <small>Average unique accounts per day</small>
+              </div>
+              <div class="metric-card">
+                <span>Daily completion rate</span>
+                <strong id="daily-rate-value">—</strong>
+                <small>Accounts completing ÷ registered accounts</small>
+              </div>
+            </div>
+            <div class="chart-grid">
+              <section class="chart-card" aria-labelledby="daily-volume-title">
+                <div class="chart-heading">
+                  <h3 id="daily-volume-title">Tasks completed and people completing per day</h3>
+                </div>
+                <div id="daily-volume-chart" class="chart-host"></div>
+              </section>
+              <section class="chart-card" aria-labelledby="daily-rate-title">
+                <div class="chart-heading">
+                  <h3 id="daily-rate-title">Share of accounts completing each day</h3>
+                </div>
+                <div id="daily-rate-chart" class="chart-host"></div>
+              </section>
+            </div>
+            <p class="chart-footnote" id="daily-footnote"></p>
+          </section>
+
+          <!-- Acquisition: account registrations and the size of the registered user base. -->
+          <section class="analytics-panel" id="panel-new-accounts" aria-label="New account acquisition" hidden>
+            <div class="metric-grid metric-grid-three">
+              <div class="metric-card">
+                <span>New accounts</span>
+                <strong id="new-accounts-value">—</strong>
+                <small id="new-accounts-change">Accounts created in this range</small>
+              </div>
+              <div class="metric-card">
+                <span>Total accounts</span>
+                <strong id="total-accounts-value">—</strong>
+                <small>Current registered accounts</small>
+              </div>
+              <div class="metric-card">
+                <span>Change vs. prior period</span>
+                <strong id="account-growth-value">—</strong>
+                <small>New accounts compared with the previous equal-length period</small>
+              </div>
+            </div>
+            <div class="chart-grid">
+              <section class="chart-card" aria-labelledby="new-accounts-chart-title">
+                <div class="chart-heading">
+                  <h3 id="new-accounts-chart-title">Accounts created over time</h3>
+                </div>
+                <div id="new-accounts-chart" class="chart-host"></div>
+              </section>
+              <section class="chart-card" aria-labelledby="total-accounts-chart-title">
+                <div class="chart-heading">
+                  <h3 id="total-accounts-chart-title">Growth in registered accounts</h3>
+                </div>
+                <div id="total-accounts-chart" class="chart-host"></div>
+              </section>
+            </div>
+            <p class="chart-footnote" id="accounts-footnote"></p>
+          </section>
+
+          <!-- Acquisition: Canvas adoption is measured from imported assignment data. -->
+          <section class="analytics-panel" id="panel-canvas-connection" aria-label="Canvas adoption and usage" hidden>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <span>Accounts with Canvas assignments</span>
+                <strong id="canvas-users-value">—</strong>
+                <small>Accounts with an imported assignment on record</small>
+              </div>
+              <div class="metric-card">
+                <span>Canvas adoption rate</span>
+                <strong id="canvas-rate-value">—</strong>
+                <small>Accounts with Canvas assignments ÷ all accounts</small>
+              </div>
+              <div class="metric-card">
+                <span>Canvas assignment imports</span>
+                <strong id="canvas-imports-value">—</strong>
+                <small>Canvas tasks added during this range</small>
+              </div>
+              <div class="metric-card">
+                <span>Canvas assignments completed</span>
+                <strong id="canvas-completions-value">—</strong>
+                <small>Canvas tasks completed during this range</small>
+              </div>
+            </div>
+            <div class="chart-grid">
+              <section class="chart-card chart-card-wide" aria-labelledby="canvas-chart-title">
+                <div class="chart-heading">
+                  <h3 id="canvas-chart-title">Accounts importing and completing Canvas assignments</h3>
+                </div>
+                <div id="canvas-chart" class="chart-host"></div>
+              </section>
+            </div>
+            <p class="chart-footnote" id="canvas-footnote"></p>
+          </section>
         </section>
       </div>
     </div>

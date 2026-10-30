@@ -1,49 +1,44 @@
-# Coursewise admin setup
+# Coursewise admin analytics setup
 
-The admin page keeps the existing `coursewise_is_admin()` permission check. Admin is a permission granted to selected signed-in accounts; it is not a separate account type. Supabase remains the authorization boundary.
+The admin page preserves the existing coursewise_is_admin() permission check. Admin is a permission granted to selected signed-in accounts, not a separate account type. Supabase remains the authorization boundary for every aggregate analytics function.
 
-## 1. Install the existing admin setup
+## Apply the SQL
 
-In the Coursewise Supabase project, open **SQL Editor** and run `supabase/admin-setup.sql` once. It creates the existing admin permission table, RLS policies, and admin-only aggregate functions. If this setup was already applied, do not drop or recreate its tables.
+In the Coursewise Supabase project, open **SQL Editor** and run the files in this order:
 
-## 2. Grant the existing admin permission
+1. supabase/admin-setup.sql if the existing admin permissions and helper functions have not already been installed.
+2. supabase/admin-activity.sql if task activity tracking has not already been installed. It creates the protected task event log needed by the completed-versus-overdue dashboard and the additional retention/Canvas charts.
+3. supabase/admin-okr-analytics.sql to add the aggregate data used by the other three OKRs.
 
-In Supabase **Authentication → Users**, copy the UID of each existing account that should administer Coursewise. Replace the placeholder below and run it in SQL Editor:
+If the first two files were already applied for the prior admin dashboard, run only admin-okr-analytics.sql. The new file creates indexes and a protected aggregate function. It does not add columns to User or Tasks, and it does not change the existing admin table or permission logic.
 
-```sql
-insert into public.coursewise_admins (user_id)
-values ('YOUR_AUTH_USER_UUID'::uuid)
-on conflict (user_id) do nothing;
-```
+## What each OKR measures
 
-Use the Auth UID, not the `UserID` from the public profile table. To remove permission later:
+- **New accounts:** account registrations by UserCreationDate, cumulative registered accounts, and change against the previous period of the same length.
+- **Canvas adoption and usage:** the number and share of accounts with at least one imported Canvas assignment still represented in task activity, plus assignment imports and completions over time.
+- **Tasks completed per day:** daily completion count, unique accounts completing at least one task, and those accounts as a share of accounts registered by that day. The Canvas/non-Canvas and active-user filters are available.
+- **Tasks completed vs. overdue:** the period completion count, current overdue backlog, completion-to-overdue ratio, and Canvas/non-Canvas comparison. Date-only tasks become overdue the next day; timed tasks become overdue after the due time.
 
-```sql
-delete from public.coursewise_admins
-where user_id = 'YOUR_AUTH_USER_UUID'::uuid;
-```
+“Active” means that an account added or completed a task in the last 30 days. The task event log starts when admin-activity.sql is applied. Previous completion dates cannot be reconstructed. The initial activity migration seeds the current task state and recent task creation dates, so it can show the current overdue count immediately but does not invent earlier completion history.
 
-## 3. Enable task activity analytics
+## Canvas connection status
 
-Run `supabase/admin-activity.sql` once after `admin-setup.sql`. This adds a protected activity log and the `coursewise_admin_activity` aggregate function. It does not change the existing admin permission table or policies, and it does not add columns to `User` or `Tasks`.
+The supplied website calls a canvas-connect Supabase Edge Function for each signed-in account. Its connection status is not exposed as a field in the supplied User or Tasks schema, and the Edge Function source was not included in the project archive. The admin dashboard therefore measures Canvas use through imported assignments. This confirms that an account imported Canvas data, but it cannot count accounts that connected Canvas and have not imported an assignment. No Canvas feed URL or token is exposed to the browser or these analytics functions.
 
-The migration seeds a current-state snapshot for existing tasks and uses the existing `TaskCreationDate` values to identify accounts that added tasks in the last 30 days. A trigger records task creation, completion, reopening, due-date/source changes, and deletion from then on. Previous completion dates cannot be recovered, so completion trends and active-user status based on completing tasks are available only from setup onward.
+If you need the precise connected-account percentage, the canvas-connect Edge Function will need to record a connection state in a protected database table or provide a separate admin-only aggregate. The source for that deployed function is needed to add this without guessing how it stores Canvas credentials.
 
-The dashboard defines:
+## Deployment
 
-- **Overdue:** incomplete, non-excluded tasks past their due date. Date-only tasks become overdue the next day; tasks with a due time become overdue after that time.
-- **Active user:** an account that added or completed a task in the last 30 days.
-- **Completed-to-overdue ratio:** completion events during the selected range divided by the current overdue task count.
-- **Canvas filter:** tasks marked `IsAssignment`; non-Canvas tasks are not marked as assignments.
+Keep the updated files in their existing paths:
 
-The time-range menu offers one week, one month, six months, and one year. Historical overdue counts are reconstructed from task state changes recorded after setup. Existing tasks contribute to the current overdue count immediately, but do not create pre-setup history.
+- admin.html
+- css/admin.css
+- js/admin.js
+- supabase/admin-okr-analytics.sql
+- ADMIN-SETUP.md
 
-## 4. Deploy the page
+Deploy the website through the same GitHub Pages workflow as the other Coursewise pages. No service-role key belongs in frontend code.
 
-Copy the updated `admin.html`, `css/admin.css`, and `js/admin.js` into the repository, along with `supabase/admin-activity.sql` and this setup note. Keep the files at the same paths, then deploy the site. The page uses the existing public Supabase client configuration; do not put a service-role key in frontend code.
+## Data access and history
 
-The four OKR cards are present. **Tasks completed vs. overdue** is connected to Supabase and has live metrics and charts. The other three cards are ready placeholders until their metric definitions and data sources are added. Canvas connection rate will need a separate admin-safe aggregate of Canvas connection status; the current project only exposes per-account status through a server function.
-
-## Data access
-
-The analytics RPC checks `coursewise_is_admin()` and returns aggregate counts and time-series points only. The page does not fetch other users' task names, email addresses, passwords, or Canvas tokens. The activity table has RLS enabled and no direct browser grants. Do not add a service-role key to client code.
+The new RPC checks coursewise_is_admin() and returns aggregate counts and chart points only. The page reads only the signed-in administrator's own profile fields to show avatar initials. The activity table has row-level security enabled and no direct browser grants. Account registration counts use the existing UserCreationDate field.
